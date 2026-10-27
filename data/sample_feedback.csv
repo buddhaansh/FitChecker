@@ -1,0 +1,6 @@
+feedback_id,outfit_id,user_rating,accepted,worn,occasion,weather,notes,timestamp,is_sample
+fb_s001,outfit_s001,4,True,True,Daily College Wear,Warm,Felt comfortable and put-together,2026-10-20 09:15:00,True
+fb_s002,outfit_s002,5,True,True,College Presentation,Warm,Got compliments,2026-10-22 08:45:00,True
+fb_s003,outfit_s003,3,True,False,Casual Outing,Hot,Liked it but too warm,2026-10-17 11:00:00,True
+fb_s004,outfit_s004,4,True,True,Daily College Wear,Cool,Good hoodie day,2026-10-23 09:00:00,True
+fb_s005,outfit_s005,2,False,False,Party,Warm,Felt overdressed,2026-10-14 19:00:00,True

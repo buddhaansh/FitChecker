@@ -1,0 +1,26 @@
+item_id,category,subcategory,color,color_hex,secondary_color,pattern,formality,style_tags,season,weather,fit,brand,purchase_price,purchase_date,photo_path,times_worn,last_worn,notes,added_date,is_sample
+item_s001,T-Shirt,,White,#FFFFFF,,Plain,1,"Casual,Minimalist",All Seasons,Any,Regular,,350,,,5,2026-10-20,Classic white tee,2026-09-01,True
+item_s002,T-Shirt,,Navy Blue,#1B2A4A,,Plain,1,"Casual,Streetwear",All Seasons,Any,Regular,,399,,,3,2026-10-18,Everyday navy tee,2026-09-01,True
+item_s003,T-Shirt,,Black,#1A1A1A,,Printed,1,"Casual,Streetwear",All Seasons,Any,Regular,,449,,,1,2026-10-10,Graphic print tee,2026-09-01,True
+item_s004,Shirt,,Light Blue,#ADD8E6,,Plain,3,"Smart Casual,Formal",All Seasons,Any,Slim,,799,,,4,2026-10-22,Good for presentations,2026-09-01,True
+item_s005,Shirt,,White,#FFFFFF,,Plain,4,"Formal,Smart Casual",All Seasons,Any,Slim,,899,,,2,2026-10-15,Formal white shirt,2026-09-01,True
+item_s006,Shirt,,Olive Green,#6B7C47,,Checked,2,"Casual,Smart Casual",All Seasons,Any,Regular,,649,,,1,2026-10-05,Flannel check shirt,2026-09-01,True
+item_s007,Hoodie,,Grey,#808080,,Plain,1,"Casual,Streetwear",Winter,Cool,Regular,,1199,,,6,2026-10-23,Go-to grey hoodie,2026-09-01,True
+item_s008,Hoodie,,Black,#1A1A1A,,Plain,1,"Casual,Streetwear",Winter,Cool,Loose / Oversized,,1299,,,2,2026-10-12,Oversized black hoodie,2026-09-01,True
+item_s009,Jeans,,Dark Blue,#1F3A7D,,Plain,2,"Casual,Smart Casual",All Seasons,Any,Slim,,1499,,,8,2026-10-24,Favourite slim jeans,2026-09-01,True
+item_s010,Jeans,,Black,#1A1A1A,,Plain,2,"Casual,Streetwear",All Seasons,Any,Regular,,1299,,,4,2026-10-19,Black straight jeans,2026-09-01,True
+item_s011,Jeans,,Light Blue,#ADD8E6,,Plain,2,"Casual,Streetwear",Summer,Warm,Slim,,1399,,,1,2026-09-15,Light wash jeans,2026-09-01,True
+item_s012,Trousers,,Beige,#D2B48C,,Plain,3,"Smart Casual,Formal",All Seasons,Any,Regular,,999,,,2,2026-10-16,Beige chino trousers,2026-09-01,True
+item_s013,Chinos,,Khaki,#C3A343,,Plain,3,"Smart Casual,Casual",All Seasons,Any,Slim,,1099,,,3,2026-10-21,Khaki slim chinos,2026-09-01,True
+item_s014,Shorts,,Olive Green,#6B7C47,,Plain,1,"Casual,Sporty",Summer,Hot,Regular,,599,,,0,,Gym and outing shorts,2026-09-01,True
+item_s015,Shorts,,Navy Blue,#1B2A4A,,Plain,1,"Casual,Sporty",Summer,Hot,Regular,,499,,,2,2026-10-08,Navy cargo shorts,2026-09-01,True
+item_s016,Sneakers,,White,#FFFFFF,,Plain,2,"Casual,Smart Casual,Streetwear",All Seasons,Any,Regular,,2499,,,7,2026-10-24,White canvas sneakers,2026-09-01,True
+item_s017,Sneakers,,Black,#1A1A1A,,Plain,2,"Casual,Streetwear",All Seasons,Any,Regular,,1999,,,5,2026-10-20,Black low-top sneakers,2026-09-01,True
+item_s018,Formal Shoes,,Black,#1A1A1A,,Plain,4,"Formal,Smart Casual",All Seasons,Any,Regular,,2999,,,1,2026-10-01,Oxford formals,2026-09-01,True
+item_s019,Sandals,,Brown,#8B4513,,Plain,1,"Casual,Bohemian",Summer,Hot,Regular,,799,,,4,2026-10-17,Everyday sandals,2026-09-01,True
+item_s020,Blazer,,Navy Blue,#1B2A4A,,Plain,4,"Formal,Smart Casual",All Seasons,Any,Slim,,3499,,,1,2026-10-14,Classic navy blazer,2026-09-01,True
+item_s021,Jacket,,Olive Green,#6B7C47,,Plain,2,"Casual,Streetwear",Winter,Cool,Regular,,2199,,,3,2026-10-22,Bomber jacket,2026-09-01,True
+item_s022,Accessories,,Black,#1A1A1A,,Plain,2,"Casual,Formal",All Seasons,Any,Regular,,399,,,6,2026-10-24,Black canvas backpack,2026-09-01,True
+item_s023,Polo,,White,#FFFFFF,,Plain,2,"Smart Casual,Casual",All Seasons,Any,Slim,,699,,,2,2026-10-11,White polo shirt,2026-09-01,True
+item_s024,Sweater,,Maroon,#800000,,Plain,2,"Smart Casual,Casual",Winter,Cool,Regular,,1599,,,1,2026-10-03,Maroon crew-neck sweater,2026-09-01,True
+item_s025,Windcheater,,Black,#1A1A1A,,Plain,2,"Casual,Sporty",Winter,Cold,Regular,,1799,,,2,2026-10-09,Rain-proof windcheater,2026-09-01,True

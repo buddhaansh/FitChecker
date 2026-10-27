@@ -1,0 +1,144 @@
+"""
+pages/1_My_Wardrobe.py — View, Edit and Delete Garments
+"""
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import streamlit as st
+import pandas as pd
+from PIL import Image
+
+from src.data_manager import load_wardrobe, delete_garment, update_garment
+from src.wardrobe_manager import get_wardrobe_summary
+from src.skin_tone_analyzer import load_profile, get_garment_palette_badge
+from src.theme_helper import apply_editorial_theme
+from config.settings import CATEGORIES, PATTERNS, SEASONS, WEATHER_OPTIONS, FIT_OPTIONS, STYLE_TAGS
+
+st.set_page_config(page_title="Wardrobe Collection", page_icon="🧥", layout="wide")
+
+# Apply full editorial theme: light brown sidebar, light brown text, warm selection
+apply_editorial_theme()
+
+profile = load_profile()
+user_name = profile.get("name", "BUDZ")
+st.title(f"🧥 {user_name}'s Wardrobe")
+st.caption(f"Curated private collection for {user_name} — editorial digital closet.")
+
+wardrobe_df = load_wardrobe()
+summary = get_wardrobe_summary(wardrobe_df)
+profile = load_profile()
+season_curr = profile.get("palette_tier", profile.get("season", "medium_golden"))
+
+# ── Top-level metrics ──
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Total Items",     summary["total"])
+c2.metric("Never Worn",      summary["never_worn"])
+c3.metric("Utilization",     f"{summary['utilization_pct']}%")
+c4.metric("Rarely Worn",     summary["rarely_worn"])
+
+st.markdown("---")
+
+if wardrobe_df.empty:
+    st.markdown(f"""
+    <div style="background: #FFFFFF; border: 1.5px dashed #D5C7B8; border-radius: 14px; padding: 42px 32px; text-align: center; margin: 20px 0; box-shadow: 0 4px 20px rgba(74, 53, 43, 0.04);">
+        <div style="font-size: 42px; margin-bottom: 12px;">🧥✨</div>
+        <div style="font-family: 'Playfair Display', Georgia, serif; font-size: 24px; font-weight: 700; color: #241C18; margin-bottom: 8px;">
+            Wardrobe Zero — Clean Slate
+        </div>
+        <div style="font-size: 15px; color: #704E38; max-width: 540px; margin: 0 auto 24px auto; line-height: 1.6; font-weight: 500;">
+            Your wardrobe starts at <strong>0 items</strong> so you can curate your own personal clothes. Snap or upload pieces from your almirah to calculate skin tone harmony, silhouette fit, and personalized outfit curations calibrated for <strong>{user_name}</strong>.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    b_col1, b_col2 = st.columns(2)
+    with b_col1:
+        if st.button("📷 ADD CLOTHING FROM ALMIRAH", type="primary", use_container_width=True):
+            st.switch_page("pages/2_Add_Clothing.py")
+    with b_col2:
+        if st.button("✨ VIEW EDITORIAL SHOWCASES", type="secondary", use_container_width=True):
+            st.switch_page("app.py")
+    st.stop()
+
+# ── Filters ──
+with st.expander("🔍 Filter Wardrobe", expanded=False):
+    f1, f2, f3 = st.columns(3)
+    filter_cat   = f1.multiselect("Category",  sorted(wardrobe_df["category"].dropna().unique()))
+    filter_color = f2.multiselect("Color",     sorted(wardrobe_df["color"].dropna().unique()))
+    filter_worn  = f3.selectbox("Wear Status",  ["All", "Worn", "Never Worn"])
+
+filtered = wardrobe_df.copy()
+if filter_cat:
+    filtered = filtered[filtered["category"].isin(filter_cat)]
+if filter_color:
+    filtered = filtered[filtered["color"].isin(filter_color)]
+if filter_worn == "Worn":
+    filtered = filtered[pd.to_numeric(filtered["times_worn"], errors="coerce").fillna(0) > 0]
+elif filter_worn == "Never Worn":
+    filtered = filtered[pd.to_numeric(filtered["times_worn"], errors="coerce").fillna(0) == 0]
+
+st.markdown(f"Showing **{len(filtered)}** of **{summary['total']}** items")
+
+# ── Item Cards ──
+COLS_PER_ROW = 3
+items = filtered.to_dict("records")
+
+for row_start in range(0, len(items), COLS_PER_ROW):
+    cols = st.columns(COLS_PER_ROW)
+    for col_idx, item in enumerate(items[row_start : row_start + COLS_PER_ROW]):
+        with cols[col_idx]:
+            with st.container(border=True):
+                # Photo
+                photo = str(item.get("photo_path", "")).strip()
+                if photo and os.path.exists(photo):
+                    try:
+                        st.image(photo, use_column_width=True)
+                    except Exception:
+                        st.markdown("📷 *Image unavailable*")
+                else:
+                    # Color swatch placeholder
+                    color_name = item.get("color", "grey").lower()
+                    st.markdown(
+                        f"<div style='background:{item.get('color_hex','#808080') or '#808080'};"
+                        f"height:80px;border-radius:6px;margin-bottom:8px;'></div>",
+                        unsafe_allow_html=True
+                    )
+
+                # Details
+                palette_b = get_garment_palette_badge(item.get("color", ""), season_curr)
+                st.markdown(f"<span style='font-size:10px; font-weight:700; background:#F2ECE4; color:#8C3B1E; padding:2px 8px; border-radius:10px; display:inline-block; margin-bottom:4px;'>{palette_b['badge']}</span>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:16px; font-weight:700; color:#241C18; margin-bottom:4px;'>{item.get('color','')} {item.get('category','')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:13.5px; font-weight:500; color:#8C5835; margin-bottom:2px;'>Pattern: {item.get('pattern','—')} &nbsp;|&nbsp; Formality: {'⭐' * int(item.get('formality', 3))}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:13.5px; font-weight:500; color:#8C5835; margin-bottom:4px;'>Worn: {item.get('times_worn', 0)}× &nbsp;|&nbsp; Last: {item.get('last_worn','—') or '—'}</div>", unsafe_allow_html=True)
+
+                if item.get("is_sample"):
+                    st.markdown("<div style='font-size:12px; font-weight:600; color:#B85D3B; margin-bottom:6px;'>🏷️ Sample data</div>", unsafe_allow_html=True)
+
+                # Actions
+                exp = st.expander("Edit / Delete")
+                with exp:
+                    new_formality = st.slider(
+                        "Formality", 1, 5,
+                        int(item.get("formality", 3)),
+                        key=f"form_{item['item_id']}"
+                    )
+                    new_notes = st.text_input(
+                        "Notes", value=str(item.get("notes","") or ""),
+                        key=f"notes_{item['item_id']}"
+                    )
+                    save_col, del_col = st.columns(2)
+                    if save_col.button("💾 Save", key=f"save_{item['item_id']}"):
+                        update_garment(item["item_id"], {"formality": new_formality, "notes": new_notes})
+                        st.success("Saved!")
+                        st.rerun()
+                    if del_col.button("🗑️ Delete", key=f"del_{item['item_id']}"):
+                        delete_garment(item["item_id"])
+                        st.warning("Deleted.")
+                        st.rerun()
+
+# ── Raw Table View ──
+with st.expander("📋 View as Table"):
+    display_cols = ["category", "color", "pattern", "formality",
+                    "times_worn", "last_worn", "season", "style_tags", "is_sample"]
+    show_cols = [c for c in display_cols if c in filtered.columns]
+    st.dataframe(filtered[show_cols], use_container_width=True)
