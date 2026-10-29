@@ -637,9 +637,20 @@ with tab_dress_me:
                             st.markdown(f"<div style='background:{fitm.get('color_hex','#808080')};height:80px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;'>✨</div>", unsafe_allow_html=True)
                         st.markdown(f"<div style='font-size:12.5px; font-weight:700; color:#1A1412; margin-top:6px;'>{fitm.get('color','').title()} {fitm.get('category')}</div>", unsafe_allow_html=True)
 
+                top_name = f"{active_top_dict.get('color','').title()} top" if active_top_dict else "Top piece"
+                bot_name = f"{active_bot_dict.get('color','').title()} bottom" if active_bot_dict else "Bottom piece"
+                if active_top_dict and active_bot_dict:
+                    interplay_desc = f"{top_name} paired with {bot_name}."
+                elif active_top_dict:
+                    interplay_desc = f"Showcasing {top_name}. (Add a bottom piece to analyze pair harmony.)"
+                elif active_bot_dict:
+                    interplay_desc = f"Showcasing {bot_name}. (Add an upper piece to analyze pair harmony.)"
+                else:
+                    interplay_desc = "Layer pieces assembled."
+
                 st.markdown(f"""
                     <div style="font-size:13.5px; color:#2E2722; text-align:left; background:#FAF6F3; border-radius:10px; padding:14px; margin-top:16px; line-height:1.55;">
-                        🎨 <strong>Color Interplay:</strong> {active_top_dict.get('color','').title()} top paired with {active_bot_dict.get('color','').title()} bottom.<br>
+                        🎨 <strong>Color Interplay:</strong> {interplay_desc}<br>
                         💡 <strong>Complexion Note:</strong> {k_skin_note}<br>
                         📐 <strong>Silhouette Proportion:</strong> {k_body_note}
                     </div>
