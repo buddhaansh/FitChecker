@@ -118,6 +118,36 @@ def analyze_garment_silhouette(image_input) -> Dict[str, Any]:
             if upper_w > mid_w * 1.15:
                 shoulder_taper = True
 
+        # ── Button Placket & Collar / Check Pattern Detection (Shirt vs T-Shirt) ──
+        has_placket = False
+        is_patterned = False
+        has_collar = False
+
+        gray_roi = gray[y0:y1, x0:x1] if 'gray' in locals() else cv2.cvtColor(arr[y0:y1, x0:x1, :3], cv2.COLOR_RGB2GRAY)
+        gh, gw = gray_roi.shape
+        if gh >= 40 and gw >= 40:
+            # Placket check down vertical center column
+            mid_x = gw // 2
+            placket_box = gray_roi[int(gh * 0.20): int(gh * 0.80), max(0, mid_x - 14): min(gw, mid_x + 14)]
+            if placket_box.size > 50:
+                sobelx = cv2.Sobel(placket_box, cv2.CV_64F, 1, 0, ksize=3)
+                if np.mean(np.abs(sobelx)) > 26.0:
+                    has_placket = True
+
+            # Edge density for check / plaid / woven texture
+            center_box = gray_roi[int(gh * 0.25): int(gh * 0.75), int(gw * 0.25): int(gw * 0.75)]
+            if center_box.size > 50:
+                edges = cv2.Canny(center_box, 40, 120)
+                if np.mean(edges > 0) > 0.11:
+                    is_patterned = True
+
+            # Collar check at upper chest
+            collar_box = gray_roi[int(gh * 0.08): int(gh * 0.28), int(gw * 0.25): int(gw * 0.75)]
+            if collar_box.size > 50:
+                collar_edges = cv2.Canny(collar_box, 40, 120)
+                if np.mean(collar_edges > 0) > 0.11:
+                    has_collar = True
+
         return {
             "aspect_ratio": aspect_ratio,
             "width": w,
@@ -126,6 +156,9 @@ def analyze_garment_silhouette(image_input) -> Dict[str, Any]:
             "is_wide": aspect_ratio < 0.85,
             "has_legs": has_legs,
             "shoulder_taper": shoulder_taper,
+            "has_placket": has_placket,
+            "is_patterned": is_patterned,
+            "has_collar": has_collar,
         }
 
     except Exception:
@@ -320,9 +353,21 @@ def suggest_garment_attributes(
 
     # Case C: Tops & Outerwear (Standard rectangular / torso proportions)
     else:
-        if color_name in ("black", "charcoal", "dark grey") and sil.get("shoulder_taper"):
+        has_placket = sil.get("has_placket", False)
+        is_patterned = sil.get("is_patterned", False)
+        has_collar = sil.get("has_collar", False)
+
+        if has_placket or is_patterned or (has_collar and ar >= 1.15):
+            category = "Shirt"
+            pattern_desc = "plaid/check pattern" if is_patterned else "collared button-down structure"
+            confidence = 0.92
+            reason = f"Distinct {pattern_desc} with vertical placket/collar indicates a Shirt."
+            formality = 3
+            fit = "Regular"
+            style_tags = ["Smart Casual", "Preppy", "Casual"]
+        elif color_name in ("black", "charcoal", "dark grey") and sil.get("shoulder_taper"):
             category = "Blazer"
-            confidence = 0.78
+            confidence = 0.82
             reason = f"Structured shoulder-tapered silhouette in formal {color_name} indicates Blazer or Jacket."
             formality = 4
             fit = "Regular"

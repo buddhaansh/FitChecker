@@ -12,7 +12,8 @@ from src.data_manager import load_wardrobe, delete_garment, update_garment
 from src.wardrobe_manager import get_wardrobe_summary
 from src.skin_tone_analyzer import load_profile, get_garment_palette_badge
 from src.theme_helper import apply_editorial_theme
-from config.settings import CATEGORIES, PATTERNS, SEASONS, WEATHER_OPTIONS, FIT_OPTIONS, STYLE_TAGS
+from src.image_processor import remove_background
+from config.settings import CATEGORIES, PATTERNS, SEASONS, WEATHER_OPTIONS, FIT_OPTIONS, STYLE_TAGS, AVAILABLE_COLORS
 
 st.set_page_config(page_title="Wardrobe Collection", page_icon="🧥", layout="wide")
 
@@ -59,6 +60,34 @@ if wardrobe_df.empty:
         if st.button("✨ VIEW EDITORIAL SHOWCASES", type="secondary", use_container_width=True):
             st.switch_page("app.py")
     st.stop()
+
+# ── Batch AI Background Removal Studio ──
+has_photos = any(str(p).strip() and os.path.exists(str(p).strip()) for p in wardrobe_df.get("photo_path", []))
+if has_photos:
+    with st.expander("✂️ AI Cutout Studio (Batch Background Cleanup)", expanded=False):
+        st.markdown(
+            "<div style='font-size:13.5px; color:#4A4138; margin-bottom:8px;'>"
+            "Cleanly extract garments from room/bed/wall backgrounds across all pieces using the upgraded high-precision CV GrabCut model."
+            "</div>",
+            unsafe_allow_html=True
+        )
+        if st.button("✨ Reprocess All Photos to Clean Cutouts", type="secondary", key="btn_batch_cutout"):
+            with st.spinner("Extracting clean cutouts..."):
+                count_cleaned = 0
+                for it in wardrobe_df.to_dict("records"):
+                    p = str(it.get("photo_path", "")).strip()
+                    if p and os.path.exists(p):
+                        try:
+                            cutout = remove_background(p)
+                            base, _ = os.path.splitext(p)
+                            clean_path = base + ("_clean.png" if not base.endswith("_clean") else ".png")
+                            cutout.save(clean_path, format="PNG")
+                            update_garment(it["item_id"], {"photo_path": clean_path})
+                            count_cleaned += 1
+                        except Exception:
+                            pass
+                st.success(f"Successfully cleaned backgrounds for {count_cleaned} garments!")
+                st.rerun()
 
 # ── Filters ──
 with st.expander("🔍 Filter Wardrobe", expanded=False):
@@ -115,10 +144,22 @@ for row_start in range(0, len(items), COLS_PER_ROW):
                     st.markdown("<div style='font-size:12px; font-weight:600; color:#B85D3B; margin-bottom:6px;'>🏷️ Sample data</div>", unsafe_allow_html=True)
 
                 # Actions
-                exp = st.expander("Edit / Delete")
+                exp = st.expander("Edit / Delete / Clean")
                 with exp:
+                    curr_cat = item.get("category", "Shirt")
+                    cat_idx = CATEGORIES.index(curr_cat) if curr_cat in CATEGORIES else 0
+                    new_category = st.selectbox("Category", CATEGORIES, index=cat_idx, key=f"cat_{item['item_id']}")
+
+                    curr_color = item.get("color", "White")
+                    col_idx = AVAILABLE_COLORS.index(curr_color) if curr_color in AVAILABLE_COLORS else 0
+                    new_color = st.selectbox("Color", AVAILABLE_COLORS, index=col_idx, key=f"col_{item['item_id']}")
+
+                    curr_pat = item.get("pattern", "Solid")
+                    pat_idx = PATTERNS.index(curr_pat) if curr_pat in PATTERNS else 0
+                    new_pattern = st.selectbox("Pattern", PATTERNS, index=pat_idx, key=f"pat_{item['item_id']}")
+
                     new_formality = st.slider(
-                        "Formality", 1, 5,
+                        "Formality (1=Casual, 5=Formal)", 1, 5,
                         int(item.get("formality", 3)),
                         key=f"form_{item['item_id']}"
                     )
@@ -126,9 +167,32 @@ for row_start in range(0, len(items), COLS_PER_ROW):
                         "Notes", value=str(item.get("notes","") or ""),
                         key=f"notes_{item['item_id']}"
                     )
+
+                    # Background cleaner action
+                    photo_file = str(item.get("photo_path", "")).strip()
+                    if photo_file and os.path.exists(photo_file):
+                        if st.button("✂️ Clean Background Cutout", key=f"rebg_{item['item_id']}", use_container_width=True):
+                            with st.spinner("Extracting clean cutout..."):
+                                try:
+                                    cutout = remove_background(photo_file)
+                                    base, _ = os.path.splitext(photo_file)
+                                    clean_path = base + ("_clean.png" if not base.endswith("_clean") else ".png")
+                                    cutout.save(clean_path, format="PNG")
+                                    update_garment(item["item_id"], {"photo_path": clean_path})
+                                    st.success("Background cleanly removed!")
+                                    st.rerun()
+                                except Exception as err:
+                                    st.error(f"Failed to remove background: {err}")
+
                     save_col, del_col = st.columns(2)
-                    if save_col.button("💾 Save", key=f"save_{item['item_id']}"):
-                        update_garment(item["item_id"], {"formality": new_formality, "notes": new_notes})
+                    if save_col.button("💾 Save", key=f"save_{item['item_id']}", type="primary"):
+                        update_garment(item["item_id"], {
+                            "category": new_category,
+                            "color": new_color,
+                            "pattern": new_pattern,
+                            "formality": new_formality,
+                            "notes": new_notes
+                        })
                         st.success("Saved!")
                         st.rerun()
                     if del_col.button("🗑️ Delete", key=f"del_{item['item_id']}"):

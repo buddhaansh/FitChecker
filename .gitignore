@@ -39,3 +39,8 @@ Thumbs.db
 # Secrets / env files
 .env
 *.key
+
+# User uploaded data / test images
+user_data/images/*
+!user_data/images/.gitkeep
+

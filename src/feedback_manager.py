@@ -74,23 +74,57 @@ def record_wear_confirmation(
     worn_date: str = None,
 ) -> bool:
     """
-    Update a feedback record to mark the outfit as actually worn,
+    Update or create a feedback record to mark the outfit as actually worn,
     increment wear counts for each item, and record in wear history.
 
     Returns True on success.
     """
+    import uuid
+    from config.settings import FEEDBACK_FILE
     df = load_feedback()
-    mask = df["feedback_id"] == feedback_id
+    if feedback_id in ("canvas_custom", "dress_me_carousel", "eloquent_look"):
+        mask = pd.Series([False])
+    else:
+        mask = (df["feedback_id"] == feedback_id) if not df.empty and "feedback_id" in df.columns else pd.Series([False])
+
     if not mask.any():
-        return False
+        # Outfit was assembled live in Dress Me or Styling Canvas (not pre-generated)
+        outfits_df = load_outfits()
+        item_ids_clean = [str(x).strip() for x in item_ids if str(x).strip()]
+        if outfits_df.empty or outfit_id not in outfits_df["outfit_id"].values:
+            save_outfit({
+                "outfit_id": outfit_id,
+                "item_ids": ";".join(item_ids_clean),
+                "occasion": occasion,
+                "generated_score": 92.0,
+                "score_components": json.dumps({"styling": "custom_curated_look"}),
+                "is_sample": False,
+            })
 
-    df.loc[mask, "worn"]        = True
-    df.loc[mask, "user_rating"] = rating if rating > 0 else df.loc[mask, "user_rating"]
-    df.loc[mask, "notes"]       = notes
-    df.to_csv(__import__("config.settings", fromlist=["FEEDBACK_FILE"]).FEEDBACK_FILE, index=False)
+        fb_rec = {
+            "feedback_id": feedback_id if feedback_id and feedback_id not in ("canvas_custom", "dress_me_carousel", "eloquent_look") else f"fb_{uuid.uuid4().hex[:10]}",
+            "outfit_id": outfit_id,
+            "user_rating": rating if rating > 0 else 5,
+            "accepted": True,
+            "worn": True,
+            "occasion": occasion,
+            "weather": "Any",
+            "notes": notes,
+            "is_sample": False,
+        }
+        save_feedback_record(fb_rec)
+    else:
+        df.loc[mask, "worn"] = True
+        df.loc[mask, "accepted"] = True
+        if rating > 0:
+            df.loc[mask, "user_rating"] = rating
+        if notes:
+            df.loc[mask, "notes"] = notes
+        df.to_csv(FEEDBACK_FILE, index=False)
 
-    # Record wear events (increments times_worn per item)
-    record_wear_event(item_ids, outfit_id, occasion, worn_date)
+    # Record wear events (increments times_worn per item in wardrobe and appends wear_history)
+    clean_ids = [str(x).strip() for x in item_ids if str(x).strip() and not str(x).startswith("staple_")]
+    record_wear_event(clean_ids, outfit_id, occasion, worn_date)
     return True
 
 
