@@ -27,7 +27,7 @@ from src.skin_tone_analyzer import (
     COMPLEXION_PALETTES,
     resolve_palette,
 )
-from src.color_compatibility import pair_score
+from src.color_compatibility import pair_score, describe_color_interplay
 from src.body_criteria import score_body_silhouette_compatibility, BODY_BUILDS
 
 
@@ -250,8 +250,6 @@ def _generate_editorial_critique(
     """Generate high-fashion editorial critique paragraph reflecting both Face & Body criteria."""
     palette = resolve_palette(season)
     complexion_label = profile.get("skin_tone_label", palette.get("name", "complexion"))
-    colors = [it.get("color", "neutral") for it in items]
-    unique_colors = list(dict.fromkeys(colors))
     gender = profile.get("gender", "Boy")
     pronoun_possessive = "his" if gender in ["Boy", "Him", "Male"] else "her" if gender in ["Girl", "Her", "Female"] else "their"
     pronoun_object = "him" if gender in ["Boy", "Him", "Male"] else "her" if gender in ["Girl", "Her", "Female"] else "them"
@@ -259,25 +257,40 @@ def _generate_editorial_critique(
     build_id = profile.get("body_build", "athletic_v_taper")
     build_info = BODY_BUILDS.get(build_id, BODY_BUILDS["athletic_v_taper"])
 
-    color_lead = f"{' and '.join(unique_colors[:2])} complementary tones"
-    if len(unique_colors) >= 3:
-        color_lead = f"Palette of {unique_colors[0]}, {unique_colors[1]}, and {unique_colors[2]}"
+    top_item = next((it for it in items if it.get("category") in CATEGORY_GROUP.get("tops", [])), None)
+    bot_item = next((it for it in items if it.get("category") in CATEGORY_GROUP.get("bottoms", [])), None)
+    shoe_item = next((it for it in items if it.get("category") in CATEGORY_GROUP.get("footwear", [])), None)
+    layer_item = next((it for it in items if it.get("category") in CATEGORY_GROUP.get("outer", [])), None)
+
+    interplay_text = ""
+    if top_item and bot_item:
+        interplay_text = describe_color_interplay(
+            top_item.get("color", ""),
+            bot_item.get("color", ""),
+            top_item.get("category", "top"),
+            bot_item.get("category", "bottom")
+        )
+
+    shoe_text = f" Grounded with {shoe_item.get('color','').title()} {shoe_item.get('category','shoes')}." if shoe_item else ""
+    layer_text = f" Layered with a structured {layer_item.get('color','').title()} {layer_item.get('category','layer')}." if layer_item else ""
 
     if card_type == "BEST MATCH":
         critique = (
-            f"**Face & Complexion:** {color_lead} naturally flatter {pronoun_possessive} {complexion_label} without washout. "
-            f"**Body & Silhouette:** {build_info['flattery_note']} "
-            f"Exudes an effortless, tailored presence for {plan_title.lower()}."
+            f"**Styling Chemistry:** {interplay_text}{layer_text}{shoe_text} "
+            f"**Face & Complexion:** Tonal harmony flatters {pronoun_possessive} {complexion_label} without washing out features. "
+            f"**Body & Silhouette:** {build_info['flattery_note']} Tailored ease for {plan_title.lower()}."
         )
     elif card_type == "MORE RELAXED":
         critique = (
-            f"**Face & Complexion:** Softer, tonal blend pairing {items[0].get('color', '')} with {items[1].get('color', '') if len(items)>1 else 'neutrals'}. "
+            f"**Styling Chemistry:** Effortless casual cadence pairing {top_item.get('color','').title() if top_item else 'neutral'} tones with comfortable lower drape.{shoe_text} "
+            f"**Face & Complexion:** Soft, approachable palette in natural harmony with {pronoun_possessive} skin tone. "
             f"**Body & Silhouette:** Relaxed, easy lines prioritizing mobility and breathable comfort on {pronoun_possessive} {build_info['name'].lower()} frame for {plan_title.lower()}."
         )
     else:  # MORE POLISHED
         critique = (
+            f"**Styling Chemistry:** {interplay_text}{layer_text} "
             f"**Face & Complexion:** High-contrast crisp tones that make {pronoun_possessive} facial contours stand out with clarity. "
-            f"**Body & Silhouette:** Structured upper layering and clean lower drape that frame {pronoun_possessive} physique with commanding polish for {plan_title.lower()}."
+            f"**Body & Silhouette:** Structured drape and clean lines that frame {pronoun_possessive} physique with commanding polish for {plan_title.lower()}."
         )
 
     return critique

@@ -18,7 +18,12 @@ from src.image_processor import (
     extract_dominant_colors, get_image_info,
     remove_background
 )
-from src.garment_classifier import suggest_category_from_colors, get_category_confidence_display
+from src.garment_classifier import (
+    suggest_garment_attributes,
+    suggest_category_from_colors,
+    get_category_confidence_display,
+    get_garment_styling_advice
+)
 from src.skin_tone_analyzer import load_profile, get_garment_palette_badge, resolve_palette
 from src.theme_helper import apply_editorial_theme
 from config.settings import (
@@ -178,15 +183,17 @@ with tab_scan:
                     st.image(file_bytes, caption="Scanned Garment", use_column_width=True)
 
             with col_info:
-                with st.spinner("Analyzing colors and proportions..."):
+                with st.spinner("Analyzing colors, silhouette proportions, and styling rules..."):
                     img_for_colors = cutout_img_preview if (auto_bg and cutout_img_preview) else Image.open(io.BytesIO(file_bytes))
                     colors = extract_dominant_colors(img_for_colors)
                     info = {"width": img_for_colors.width, "height": img_for_colors.height}
+                    ai_attrs = suggest_garment_attributes(colors, image_input=cutout_img_preview or file_bytes, image_info=info)
 
                 top_color = colors[0]["name"] if colors else "White"
                 badge = get_garment_palette_badge(top_color, season_curr)
                 badge_class = "badge-best" if badge["badge"] == "BEST MATCH" else "badge-warmth" if badge["badge"] == "ADD WARMTH" else "badge-staple"
 
+                # 1. Complexion & Skin Guidance Card
                 st.markdown(f"""
                 <div class="palette-card">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -199,18 +206,47 @@ with tab_scan:
                 </div>
                 """, unsafe_allow_html=True)
 
-                st.markdown("<br><strong>Extracted Dominant Colors:</strong>", unsafe_allow_html=True)
-                for c in colors:
-                    st.markdown(
-                        f"<div style='display:flex;align-items:center;gap:10px;margin:3px 0;'>"
-                        f"<div style='width:20px;height:20px;background:{c['hex']};border-radius:4px;border:1px solid #CCC;'></div>"
-                        f"<span style='font-size:13px;'>{c['name'].title()} ({c['hex']}) — {c['percentage']:.0f}%</span>"
-                        f"</div>",
-                        unsafe_allow_html=True
-                    )
+                # 2. Executive AI Silhouette & Category Identification Card
+                conf_badge_color = "#2D5A27" if ai_attrs["confidence_label"] == "High" else "#8C3B1E"
+                conf_badge_bg = "#EBF3EA" if ai_attrs["confidence_label"] == "High" else "#F7ECE7"
+                st.markdown(f"""
+                <div style="background:#FFFFFF; border:1px solid #EBE4DA; border-radius:8px; padding:12px 14px; margin-top:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:13px; font-weight:700; color:#1A1412;">🎯 AI Garment Identification:</span>
+                        <span style="background:{conf_badge_bg}; color:{conf_badge_color}; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px;">
+                            {ai_attrs['confidence_label']} ({int(ai_attrs['confidence']*100)}%)
+                        </span>
+                    </div>
+                    <div style="font-size:15px; font-weight:700; color:#8C3B1E; margin-top:4px;">
+                        {ai_attrs['category']} <span style="font-size:12px; font-weight:500; color:#6B6055;">— Formality {ai_attrs['formality']}/5 · {ai_attrs['fit']} Fit</span>
+                    </div>
+                    <div style="font-size:12.5px; color:#4A4138; margin-top:4px; line-height:1.45;">
+                        {ai_attrs['reason']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-                suggested_cat, conf, reason = suggest_category_from_colors(colors, info)
-                st.caption(f"Suggested category: **{suggested_cat}** ({get_category_confidence_display(conf)} confidence)")
+                # 3. Editorial Styling & Pairing Guidance Box
+                styling = ai_attrs.get("styling_guidance", {})
+                chips = styling.get("color_chips", [])
+                chips_html = "".join([
+                    f"<span style='display:inline-flex; align-items:center; gap:5px; background:#F5F0EA; border:1px solid #D5CFC7; border-radius:12px; padding:2px 8px; margin:2px 4px 2px 0; font-size:11.5px; font-weight:600; color:#241C18;'>"
+                    f"<span style='width:10px; height:10px; border-radius:50%; background:{c['hex']}; display:inline-block; border:1px solid #999;'></span>"
+                    f"{c['name']} ({c['score']}%)</span>"
+                    for c in chips[:4]
+                ])
+
+                st.markdown(f"""
+                <div style="background:#FAF6F3; border:1px solid #E4D8CB; border-radius:8px; padding:12px 14px; margin-top:10px;">
+                    <div style="font-size:12px; font-weight:800; color:#8C3B1E; text-transform:uppercase; letter-spacing:0.05em;">✨ AI Editorial Styling Advice</div>
+                    <div style="font-size:12.5px; color:#2E2722; margin-top:6px; line-height:1.5;">
+                        <strong>Ideal Color Pairings:</strong><br>{chips_html}<br>
+                        <div style="margin-top:6px;"><strong>Recommended Pieces:</strong> {', '.join(styling.get('recommended_pairings', []))}</div>
+                        <div style="margin-top:4px;"><strong>Footwear Anchor:</strong> {styling.get('recommended_footwear', '')}</div>
+                        <div style="margin-top:4px;"><strong>Proportion Rule:</strong> {styling.get('proportion_rule', '')}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             st.markdown("---")
             st.markdown("#### Confirm Details & Save to Digital Wardrobe")
@@ -227,16 +263,19 @@ with tab_scan:
                 with p1:
                     p_brand     = st.text_input("Brand (e.g. Zara, Levi's, Uniqlo)")
                     p_category  = st.selectbox("Category *", CATEGORIES,
-                                                index=CATEGORIES.index(suggested_cat) if suggested_cat in CATEGORIES else 0)
+                                                index=CATEGORIES.index(ai_attrs["category"]) if ai_attrs["category"] in CATEGORIES else 0)
                     p_color     = st.selectbox("Primary Color *", AVAILABLE_COLORS, index=av_idx)
                     p_color_hex = st.color_picker("Color Hex", value=colors[0]["hex"] if colors else "#808080")
-                    p_formality = st.slider("Formality (1=Casual, 5=Formal)", 1, 5, 2)
+                    p_formality = st.slider("Formality (1=Casual, 5=Formal)", 1, 5, value=ai_attrs["formality"])
 
                 with p2:
                     p_pattern   = st.selectbox("Pattern", PATTERNS)
-                    p_fit       = st.selectbox("Fit", FIT_OPTIONS)
-                    p_style     = st.multiselect("Style Tags", STYLE_TAGS, default=["Casual"])
-                    p_season    = st.selectbox("Season", SEASONS)
+                    p_fit       = st.selectbox("Fit", FIT_OPTIONS,
+                                               index=FIT_OPTIONS.index(ai_attrs["fit"]) if ai_attrs["fit"] in FIT_OPTIONS else 0)
+                    default_styles = [s for s in ai_attrs.get("style_tags", ["Casual"]) if s in STYLE_TAGS]
+                    p_style     = st.multiselect("Style Tags", STYLE_TAGS, default=default_styles if default_styles else ["Casual"])
+                    p_season    = st.selectbox("Season", SEASONS,
+                                               index=SEASONS.index(ai_attrs["season"]) if ai_attrs["season"] in SEASONS else 0)
                     p_notes     = st.text_area("Notes", placeholder="e.g. Favorite oversized fit, soft fabric")
 
                 save_btn = st.form_submit_button("✨ Save to Digital Wardrobe", type="primary", use_container_width=True)

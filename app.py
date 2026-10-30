@@ -45,7 +45,7 @@ from src.skin_tone_analyzer import (
 from src.body_criteria import (
     BODY_BUILDS, HEIGHT_PROFILES, score_body_silhouette_compatibility
 )
-from src.color_compatibility import pair_score
+from src.color_compatibility import pair_score, describe_color_interplay
 from src.mood_engine import parse_plan_and_mood, PRESET_PLANS
 from src.editorial_recommender import (
     generate_editorial_recommendations,
@@ -637,10 +637,15 @@ with tab_dress_me:
                             st.markdown(f"<div style='background:{fitm.get('color_hex','#808080')};height:80px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px;'>✨</div>", unsafe_allow_html=True)
                         st.markdown(f"<div style='font-size:12.5px; font-weight:700; color:#1A1412; margin-top:6px;'>{fitm.get('color','').title()} {fitm.get('category')}</div>", unsafe_allow_html=True)
 
-                top_name = f"{active_top_dict.get('color','').title()} top" if active_top_dict else "Top piece"
-                bot_name = f"{active_bot_dict.get('color','').title()} bottom" if active_bot_dict else "Bottom piece"
+                top_name = f"{active_top_dict.get('color','').title()} {active_top_dict.get('category','top')}" if active_top_dict else "Top piece"
+                bot_name = f"{active_bot_dict.get('color','').title()} {active_bot_dict.get('category','bottom')}" if active_bot_dict else "Bottom piece"
                 if active_top_dict and active_bot_dict:
-                    interplay_desc = f"{top_name} paired with {bot_name}."
+                    interplay_desc = describe_color_interplay(
+                        active_top_dict.get("color", ""),
+                        active_bot_dict.get("color", ""),
+                        active_top_dict.get("category", "top"),
+                        active_bot_dict.get("category", "bottom")
+                    )
                 elif active_top_dict:
                     interplay_desc = f"Showcasing {top_name}. (Add a bottom piece to analyze pair harmony.)"
                 elif active_bot_dict:

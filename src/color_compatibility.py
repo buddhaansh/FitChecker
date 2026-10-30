@@ -316,3 +316,42 @@ def outfit_color_score(garment_colors: list[dict]) -> float:
             scores.append(s)
 
     return round(sum(scores) / len(scores), 1) if scores else 60.0
+
+
+def describe_color_interplay(color1: str, color2: str, cat1: str = "", cat2: str = "") -> str:
+    """
+    Generate an insightful, high-fashion editorial description of the aesthetic interplay
+    between two colors and their respective garment pieces.
+    """
+    c1 = (color1 or "").lower().strip()
+    c2 = (color2 or "").lower().strip()
+    t1 = cat1.strip() if cat1 else "upper"
+    t2 = cat2.strip() if cat2 else "lower"
+
+    pair = frozenset({c1, c2})
+    sc = pair_score(c1, c2)
+
+    # Specific signature combinations
+    if pair in [frozenset({"white", "black"}), frozenset({"white", "charcoal"})]:
+        return f"High-Contrast Monochrome ({int(sc)}% Match): Crisp {c1.title()} offset by deep {c2.title()} creates timeless, razor-sharp tailored definition."
+    elif pair in [frozenset({"olive green", "beige"}), frozenset({"olive green", "cream"}), frozenset({"olive green", "khaki"})]:
+        return f"Earthy Quiet Luxury ({int(sc)}% Match): Muted {c1.title()} paired with organic {c2.title()} delivers an understated Scandinavian aesthetic."
+    elif pair in [frozenset({"brown", "cream"}), frozenset({"tan", "cream"}), frozenset({"brown", "beige"})]:
+        return f"Coffee & Cream Tonal Warmth ({int(sc)}% Match): Rich {c1.title()} anchored by soft {c2.title()} produces welcoming sartorial depth."
+    elif pair in [frozenset({"navy blue", "white"}), frozenset({"navy blue", "cream"}), frozenset({"navy blue", "khaki"})]:
+        return f"Classic Preppy Harmony ({int(sc)}% Match): Deep {c1.title()} structured against clean {c2.title()} evokes effortless coastal refinement."
+    elif pair in [frozenset({"black", "grey"}), frozenset({"charcoal", "light grey"}), frozenset({"black", "charcoal"})]:
+        return f"Sleek Monochromatic Gradient ({int(sc)}% Match): Seamless urban transition between {c1.title()} and {c2.title()} with minimalist modern drape."
+    elif pair in [frozenset({"maroon", "cream"}), frozenset({"burgundy", "beige"}), frozenset({"maroon", "white"})]:
+        return f"Rich Regal Contrast ({int(sc)}% Match): Luxurious {c1.title()} highlighted by crisp neutral {c2.title()} for an elevated presence."
+    elif pair in [frozenset({"black", "olive green"}), frozenset({"charcoal", "olive green"})]:
+        return f"Tactical Modernism ({int(sc)}% Match): Strong {c1.title()} paired with utilitarian {c2.title()} offers an assertive, masculine silhouette."
+    elif pair in [frozenset({"rust", "black"}), frozenset({"rust", "dark blue"})]:
+        return f"Warm Autumnal Accent ({int(sc)}% Match): Vibrant {c1.title()} grounded by deep {c2.title()} for sophisticated seasonal warmth."
+    elif sc >= 85:
+        return f"Refined Color Harmony ({int(sc)}% Match): {c1.title()} and {c2.title()} naturally harmonize, balancing visual weight between {t1} and {t2}."
+    elif sc >= 70:
+        return f"Balanced Contrast ({int(sc)}% Match): {c1.title()} against {c2.title()} provides clean visual separation and modern everyday ease."
+    else:
+        return f"Dynamic Contrast ({int(sc)}% Match): Bold interplay between {c1.title()} and {c2.title()}; ground with clean neutral footwear."
+
