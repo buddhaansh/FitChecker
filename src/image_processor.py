@@ -118,9 +118,9 @@ def resize_image(img: Image.Image, max_size: tuple = THUMBNAIL_SIZE) -> Image.Im
 
 def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5) -> Image.Image:
     """
-    Remove background from garment photo using CIELAB multi-cluster analysis,
-    edge detection, and center-component GrabCut segmentation.
-    Produces a clean, transparent RGBA PIL Image isolating the primary garment.
+    Remove background from garment photo using adaptive multi-cluster analysis,
+    border-sample background modeling, cavity/inter-leg negative space clearance,
+    and GrabCut segmentation. Produces a clean, transparent RGBA PIL Image isolating the garment.
     """
     import cv2
     import io
@@ -142,63 +142,110 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
 
     h, w = img.shape[:2]
 
+    # Handle edge cases (tiny or uniform images)
+    if h < 10 or w < 10 or np.std(img) < 2.0:
+        b, g, r = cv2.split(img)
+        alpha = np.full((h, w), 255, dtype=np.uint8)
+        rgba = cv2.merge([r, g, b, alpha])
+        return Image.fromarray(rgba, mode="RGBA")
+
     try:
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
 
-        # 1. Sample central region (where the target garment is focused)
-        roi_h_start, roi_h_end = int(h * 0.28), int(h * 0.72)
-        roi_w_start, roi_w_end = int(w * 0.28), int(w * 0.72)
+        # 1. Outer Border Background Analysis
+        bx = max(int(w * margin_pct), 3)
+        by = max(int(h * margin_pct), 3)
+        border_mask = np.zeros((h, w), dtype=bool)
+        border_mask[:by, :] = True
+        border_mask[-by:, :] = True
+        border_mask[:, :bx] = True
+        border_mask[:, -bx:] = True
+
+        border_pixels = lab[border_mask].reshape(-1, 3).astype(float)
+        bg_mean = np.median(border_pixels, axis=0)
+        dist_to_bg = np.linalg.norm(lab.astype(float) - bg_mean, axis=2)
+
+        # 2. Sample Central ROI for Garment Color Profile
+        roi_h_start, roi_h_end = int(h * 0.22), int(h * 0.78)
+        roi_w_start, roi_w_end = int(w * 0.20), int(w * 0.80)
         roi = lab[roi_h_start:roi_h_end, roi_w_start:roi_w_end].reshape(-1, 3).astype(float)
 
-        # Cluster the garment's colors (handles patterns, folds, stripes)
-        n_clusters = min(3, max(1, len(roi)))
+        # Exclude obvious border background pixels from ROI before clustering
+        roi_not_bg = roi[np.linalg.norm(roi - bg_mean, axis=1) > 22]
+        sample_pool = roi_not_bg if len(roi_not_bg) > 80 else roi
+
+        n_clusters = min(4, max(1, len(sample_pool) // 80))
         km = KMeans(n_clusters=n_clusters, n_init=3, random_state=42)
-        km.fit(roi)
-        centers = km.cluster_centers_
+        km.fit(sample_pool)
 
-        # Perceptual color distance to nearest garment color center
-        dists = [np.linalg.norm(lab.astype(float) - c, axis=2) for c in centers]
-        min_dist = np.minimum.reduce(dists)
+        counts = np.bincount(km.labels_, minlength=n_clusters)
+        dom_idx = np.argmax(counts)
+        dom_center = km.cluster_centers_[dom_idx]
 
-        # 2. GrabCut mask initialization
+        # Valid clusters: must be color-coherent with dominant fabric (delta E <= 42)
+        valid_centers = []
+        outlier_centers = []
+        for i, center in enumerate(km.cluster_centers_):
+            d_dom = np.linalg.norm(center - dom_center)
+            d_bg = np.linalg.norm(center - bg_mean)
+            if d_dom <= 42 and d_bg > 18:
+                valid_centers.append(center)
+            else:
+                outlier_centers.append(center)
+
+        if not valid_centers:
+            valid_centers = [dom_center]
+
+        # Perceptual distance to valid garment centers
+        dists_valid = [np.linalg.norm(lab.astype(float) - c, axis=2) for c in valid_centers]
+        min_dist_valid = np.minimum.reduce(dists_valid)
+
+        # Mask initialization
         mask = np.full((h, w), cv2.GC_PR_BGD, dtype=np.uint8)
+        mask[border_mask] = cv2.GC_BGD
 
-        # Core center is probable foreground
-        mask[int(h * 0.30):int(h * 0.70), int(w * 0.30):int(w * 0.70)] = cv2.GC_PR_FGD
+        # Obvious background matching borders
+        mask[dist_to_bg < 18] = cv2.GC_BGD
 
-        # Outer border is definite background
-        bx = max(int(w * margin_pct), 4)
-        by = max(int(h * margin_pct), 4)
-        mask[:by, :] = cv2.GC_BGD
-        mask[-by:, :] = cv2.GC_BGD
-        mask[:, :bx] = cv2.GC_BGD
-        mask[:, -bx:] = cv2.GC_BGD
+        # Outlier color clusters (e.g. cyan shirt, contrasting objects behind pants)
+        if outlier_centers:
+            dists_outlier = [np.linalg.norm(lab.astype(float) - c, axis=2) for c in outlier_centers]
+            min_dist_outlier = np.minimum.reduce(dists_outlier)
+            mask[(min_dist_outlier < 22) & (min_dist_valid > 25)] = cv2.GC_BGD
 
-        # Pixels very distant in color from garment are definite background (removes chairs, walls, other clothes)
-        mask[min_dist > 44] = cv2.GC_BGD
+        # Far from valid garment colors
+        mask[min_dist_valid > 40] = cv2.GC_BGD
 
-        # Pixels matching garment colors are probable foreground
-        mask[(min_dist < 28) & (mask != cv2.GC_BGD)] = cv2.GC_PR_FGD
+        # Probable foreground: close to valid centers & not border bg
+        fg_candidate = (min_dist_valid < 26) & (dist_to_bg > 22) & (mask != cv2.GC_BGD)
+        mask[fg_candidate] = cv2.GC_PR_FGD
 
-        # 3. Graph-Cut Energy Minimization
-        bgd_model = np.zeros((1, 65), np.float64)
-        fgd_model = np.zeros((1, 65), np.float64)
-        cv2.grabCut(img, mask, None, bgd_model, fgd_model, iter_count, cv2.GC_INIT_WITH_MASK)
+        # Center core reinforcement
+        core_h_start, core_h_end = int(h * 0.35), int(h * 0.65)
+        core_w_start, core_w_end = int(w * 0.35), int(w * 0.65)
+        core_fg = fg_candidate[core_h_start:core_h_end, core_w_start:core_w_end]
+        if np.mean(core_fg) > 0.25:
+            mask[core_h_start:core_h_end, core_w_start:core_w_end][core_fg] = cv2.GC_FGD
 
-        fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+        # 3. Graph-Cut Energy Minimization (only if both BGD and FGD seeds exist)
+        has_bgd = np.any((mask == cv2.GC_BGD) | (mask == cv2.GC_PR_BGD))
+        has_fgd = np.any((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD))
 
-        # 4. Morphological clean-up
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        fg = cv2.morphologyEx(fg, cv2.MORPH_CLOSE, kernel, iterations=3)
-        fg = cv2.morphologyEx(fg, cv2.MORPH_OPEN, kernel, iterations=1)
+        if has_bgd and has_fgd:
+            bgd_model = np.zeros((1, 65), np.float64)
+            fgd_model = np.zeros((1, 65), np.float64)
+            cv2.grabCut(img, mask, None, bgd_model, fgd_model, iter_count, cv2.GC_INIT_WITH_MASK)
+            fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
+        else:
+            fg = np.where(min_dist_valid < 35, 255, 0).astype(np.uint8)
 
-        # 5. Connected component nearest to image center (the scanned garment)
+        # 4. Connected Component Analysis — Retain the primary scanned garment
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(fg)
         center_y, center_x = h // 2, w // 2
         best_lbl = 0
         min_d = float('inf')
         for lbl in range(1, num_labels):
-            if stats[lbl, cv2.CC_STAT_AREA] < (h * w * 0.05):
+            if stats[lbl, cv2.CC_STAT_AREA] < (h * w * 0.04):
                 continue
             cx, cy = centroids[lbl]
             d = np.hypot(cx - center_x, cy - center_y)
@@ -212,11 +259,54 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
         else:
             clean_fg = fg
 
-        # 6. Smooth anti-aliased edge feathering
-        alpha = cv2.GaussianBlur(clean_fg, (7, 7), 0)
+        # 5. Internal Hole Clearance (clear openings between garments, hangers, armholes)
+        cnts, hier = cv2.findContours(clean_fg.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        if hier is not None:
+            for i in range(len(cnts)):
+                if hier[0][i][3] != -1:
+                    area = cv2.contourArea(cnts[i])
+                    if area > (h * w * 0.003):
+                        cv2.drawContours(clean_fg, [cnts[i]], -1, 0, -1)
+
+        # 6. Inter-Leg / Crotch Cavity Clearance (for trousers & shorts)
+        if clean_fg.any():
+            ext_cnts, _ = cv2.findContours(clean_fg.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if ext_cnts:
+                main_cnt = max(ext_cnts, key=cv2.contourArea)
+                hull = cv2.convexHull(main_cnt, returnPoints=False)
+                if len(hull) > 3:
+                    defects = cv2.convexityDefects(main_cnt, hull)
+                    if defects is not None:
+                        best_defect = None
+                        max_depth = 0
+                        for d_idx in range(len(defects)):
+                            s, e, f, depth_raw = defects[d_idx, 0]
+                            start = tuple(main_cnt[s][0])
+                            end = tuple(main_cnt[e][0])
+                            far = tuple(main_cnt[f][0])
+                            depth = depth_raw / 256.0
+                            # Inter-leg cavity starts in lower half and extends upward into the crotch
+                            if start[1] > h * 0.45 and end[1] > h * 0.45 and far[1] < min(start[1], end[1]) and depth > (h * 0.08):
+                                if depth > max_depth:
+                                    max_depth = depth
+                                    best_defect = (start, end, far)
+
+                        if best_defect:
+                            start, end, far = best_defect
+                            cavity_pts = np.array([
+                                far,
+                                start,
+                                [start[0], h],
+                                [end[0], h],
+                                end
+                            ], dtype=np.int32)
+                            cv2.fillPoly(clean_fg, [cavity_pts], 0)
+
+        # 7. Smooth Anti-Aliased Edge Feathering
+        alpha = cv2.GaussianBlur(clean_fg, (5, 5), 0)
 
     except Exception:
-        # Fallback to standard contour bounding box if clustering or GrabCut fails
+        # Fallback to full alpha if segmentation encounters an unexpected error
         alpha = np.full((h, w), 255, dtype=np.uint8)
 
     b, g, r = cv2.split(img)

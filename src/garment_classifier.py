@@ -63,12 +63,17 @@ def suggest_category_from_colors(
     # In practice a CNN would be far better — this is a placeholder
     name = top_color.get("name", "").lower()
 
-    # Neutral colors are common across all categories — low confidence
+    # Neutral colors are common across all categories
     neutrals = {"white", "black", "grey", "gray", "beige", "off white", "cream"}
     if name in neutrals:
-        suggestion = "T-Shirt"
-        confidence = 0.35
-        reason = f"Dominant color is {name} (neutral). Category guess: T-Shirt. Please confirm."
+        if tall and name in ("black", "grey", "gray"):
+            suggestion = "Trousers"
+            confidence = 0.42
+            reason = f"Tall silhouette with {name} tones indicates Trousers or Bottoms. Please confirm."
+        else:
+            suggestion = "T-Shirt"
+            confidence = 0.35
+            reason = f"Dominant color is {name} (neutral). Category guess: T-Shirt. Please confirm."
     elif name in ("navy blue", "dark blue", "blue"):
         suggestion = "Jeans" if not tall else "Shirt"
         confidence = 0.40
