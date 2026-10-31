@@ -1120,7 +1120,7 @@ with tab_planner:
         user_prompt = st.text_input(
             f"{pronoun_possessive.title()} Plans",
             placeholder=f"Dinner with friends, polished but comfortable for {user_name}...",
-            value=st.session_state["user_plan_prompt"],
+            value=st.session_state.get("user_plan_prompt", ""),
             label_visibility="collapsed",
             key="main_plan_input"
         )
