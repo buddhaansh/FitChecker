@@ -148,8 +148,10 @@ def load_wardrobe() -> pd.DataFrame:
     """
     Load the user's wardrobe from CSV.
     Returns an empty DataFrame (with correct columns) if no file exists yet.
+    Also synchronizes resiliently with Streamlit session state if available.
     """
     ensure_user_data_dirs()
+    df = _empty_wardrobe()
     if os.path.exists(WARDROBE_FILE):
         try:
             df = pd.read_csv(WARDROBE_FILE, dtype=str)
@@ -176,11 +178,33 @@ def load_wardrobe() -> pd.DataFrame:
                     return str(p)
                 df["photo_path"] = df["photo_path"].apply(_normalize_photo)
 
-            return df
         except Exception as e:
             print(f"[data_manager] Warning: could not load wardrobe — {e}")
-            return _empty_wardrobe()
-    return _empty_wardrobe()
+            df = _empty_wardrobe()
+
+    # Session State Resilient Sync across Streamlit runs
+    try:
+        import streamlit as st
+        if "wardrobe_df" in st.session_state and isinstance(st.session_state["wardrobe_df"], pd.DataFrame):
+            sess_df = st.session_state["wardrobe_df"]
+            if not sess_df.empty:
+                if df.empty:
+                    df = sess_df.copy()
+                    df = _enforce_schema(df, WARDROBE_SCHEMA)
+                    df.to_csv(WARDROBE_FILE, index=False)
+                else:
+                    # Merge any garments present in session state but not yet saved in CSV
+                    missing_ids = set(sess_df["item_id"].dropna()) - set(df["item_id"].dropna())
+                    if missing_ids:
+                        missing_rows = sess_df[sess_df["item_id"].isin(missing_ids)]
+                        df = pd.concat([df, missing_rows], ignore_index=True)
+                        df = _enforce_schema(df, WARDROBE_SCHEMA)
+                        df.to_csv(WARDROBE_FILE, index=False)
+        st.session_state["wardrobe_df"] = df.copy()
+    except Exception:
+        pass
+
+    return df
 
 
 def _empty_wardrobe() -> pd.DataFrame:
@@ -193,6 +217,11 @@ def save_wardrobe(df: pd.DataFrame) -> bool:
     try:
         df = _enforce_schema(df, WARDROBE_SCHEMA)
         df.to_csv(WARDROBE_FILE, index=False)
+        try:
+            import streamlit as st
+            st.session_state["wardrobe_df"] = df.copy()
+        except Exception:
+            pass
         return True
     except Exception as e:
         print(f"[data_manager] Error saving wardrobe — {e}")

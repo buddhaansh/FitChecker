@@ -152,14 +152,24 @@ with tab_scan:
         cam_pic = st.camera_input("Take a photo of the piece lying flat or hung")
         if cam_pic:
             file_bytes = cam_pic.getvalue()
+            filename   = "camera_capture.jpg"
+            st.session_state["active_upload_bytes"] = file_bytes
+            st.session_state["active_upload_filename"] = filename
     else:
         uploaded_file = st.file_uploader(
             "Upload image (JPG, PNG, WEBP — max 10 MB)",
             type=["jpg", "jpeg", "png", "webp"]
         )
         if uploaded_file:
-            file_bytes = uploaded_file.read()
+            file_bytes = uploaded_file.getvalue()
             filename   = uploaded_file.name
+            st.session_state["active_upload_bytes"] = file_bytes
+            st.session_state["active_upload_filename"] = filename
+
+    # Fallback to session state bytes if Streamlit rerun cleared uploader pointer
+    if not file_bytes and st.session_state.get("active_upload_bytes"):
+        file_bytes = st.session_state["active_upload_bytes"]
+        filename   = st.session_state.get("active_upload_filename", "uploaded_garment.jpg")
 
     if file_bytes:
         is_valid, err_msg = validate_image_bytes(file_bytes, filename)
@@ -265,7 +275,7 @@ with tab_scan:
                     av_idx = i
                     break
 
-            with st.form("scanned_save_form", clear_on_submit=True):
+            with st.form("scanned_save_form", clear_on_submit=False):
                 p1, p2 = st.columns(2)
                 with p1:
                     p_brand     = st.text_input("Brand (e.g. Zara, Levi's, Uniqlo)")
@@ -319,13 +329,25 @@ with tab_scan:
                     st.success(f"🎉 Successfully catalogued piece into your digital wardrobe! (ID: `{new_id}`)")
                     st.balloons()
 
+                    # Instant navigation actions
+                    nav_c1, nav_c2 = st.columns(2)
+                    with nav_c1:
+                        if st.button("🧥 VIEW IN MY WARDROBE", type="primary", use_container_width=True, key="btn_go_wardrobe"):
+                            st.switch_page("pages/1_My_Wardrobe.py")
+                    with nav_c2:
+                        if st.button("➕ SCAN ANOTHER GARMENT", type="secondary", use_container_width=True, key="btn_scan_another"):
+                            st.session_state.pop("active_upload_bytes", None)
+                            st.session_state.pop("active_upload_filename", None)
+                            st.session_state.pop("cached_cutout_preview", None)
+                            st.rerun()
+
 
 # ─────────────────────────────────────────────
 # TAB 2 — MANUAL ENTRY
 # ─────────────────────────────────────────────
 with tab_manual:
     st.subheader("Manual Garment Entry")
-    with st.form("manual_add_form", clear_on_submit=True):
+    with st.form("manual_add_form", clear_on_submit=False):
         m1, m2 = st.columns(2)
         with m1:
             m_brand       = st.text_input("Brand", placeholder="e.g. H&M, Nike, FabIndia")
@@ -363,3 +385,10 @@ with tab_manual:
         else:
             new_id = add_garment(garment)
             st.success(f"✅ Added {m_color} {m_category} to your wardrobe! (ID: `{new_id}`)")
+            m_nav1, m_nav2 = st.columns(2)
+            with m_nav1:
+                if st.button("🧥 VIEW IN MY WARDROBE", type="primary", use_container_width=True, key="btn_m_go_wardrobe"):
+                    st.switch_page("pages/1_My_Wardrobe.py")
+            with m_nav2:
+                if st.button("➕ ADD ANOTHER PIECE", type="secondary", use_container_width=True, key="btn_m_add_another"):
+                    st.rerun()

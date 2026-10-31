@@ -53,11 +53,17 @@ if wardrobe_df.empty:
     </div>
     """, unsafe_allow_html=True)
 
-    b_col1, b_col2 = st.columns(2)
+    b_col1, b_col2, b_col3 = st.columns(3)
     with b_col1:
         if st.button("📷 ADD CLOTHING FROM ALMIRAH", type="primary", use_container_width=True):
             st.switch_page("pages/2_Add_Clothing.py")
     with b_col2:
+        if st.button("✨ LOAD 25 CURATED PIECES", type="secondary", use_container_width=True):
+            from src.data_manager import import_sample_data
+            num_imp = import_sample_data()
+            st.success(f"Successfully loaded {num_imp} curated capsule pieces!")
+            st.rerun()
+    with b_col3:
         if st.button("✨ VIEW EDITORIAL SHOWCASES", type="secondary", use_container_width=True):
             st.switch_page("app.py")
     st.stop()
