@@ -248,19 +248,27 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
             final_mask = clean_fg
 
         # Smooth anti-aliased edge feathering
-        alpha = cv2.GaussianBlur(final_mask, (5, 5), 0)
+        alpha = cv2.GaussianBlur(final_mask, (7, 7), 0)
 
     except Exception:
         # Fallback to standard rectangular margin if unexpected error occurs
         alpha = np.zeros((orig_h, orig_w), dtype=np.uint8)
-        bx = max(int(orig_w * margin_pct), 3)
-        by = max(int(orig_h * margin_pct), 3)
+        bx = max(int(orig_w * 0.08), 3)
+        by = max(int(orig_h * 0.08), 3)
         alpha[by:-by, bx:-bx] = 255
         alpha = cv2.GaussianBlur(alpha, (5, 5), 0)
 
+    # ── Pure White Background Composite ──
+    # Guarantee background pixels are converted directly to pure white (255, 255, 255)
+    # Eliminates all room, floor, bed, and wall pixels even if alpha is flattened
+    alpha_norm = (alpha.astype(np.float32) / 255.0)[:, :, np.newaxis]
     b, g, r = cv2.split(img)
-    rgba = cv2.merge([r, g, b, alpha])
-    return Image.fromarray(rgba, mode="RGBA")
+    rgb_orig = np.dstack([r, g, b]).astype(np.float32)
+    white_bg = np.full_like(rgb_orig, 255.0)
+
+    blended_rgb = (rgb_orig * alpha_norm + white_bg * (1.0 - alpha_norm)).astype(np.uint8)
+    pure_white_rgba = np.dstack([blended_rgb, alpha])
+    return Image.fromarray(pure_white_rgba, mode="RGBA")
 
 
 # ─────────────────────────────────────────────

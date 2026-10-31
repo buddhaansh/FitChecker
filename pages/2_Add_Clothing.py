@@ -173,12 +173,12 @@ with tab_scan:
 
             with col_img:
                 if auto_bg:
-                    with st.spinner("Isolating garment into clean studio cutout..."):
+                    with st.spinner("Isolating garment onto clean white background..."):
                         try:
                             cutout_img_preview = remove_background(file_bytes)
                             st.markdown("""
-                            <div style="background: #FAF6F1; border: 1.5px solid #E8DFD4; border-radius: 12px; padding: 10px 8px 4px 8px; margin-bottom: 8px; text-align: center; box-shadow: 0 4px 12px rgba(74, 53, 43, 0.04);">
-                                <div style="font-size: 11px; font-weight: 800; color: #8C3B1E; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;">✨ Editorial Studio Cutout</div>
+                            <div style="background: #FFFFFF; border: 1.5px solid #E5E0D8; border-radius: 12px; padding: 10px 8px 4px 8px; margin-bottom: 8px; text-align: center; box-shadow: 0 4px 12px rgba(74, 53, 43, 0.04);">
+                                <div style="font-size: 11px; font-weight: 800; color: #8C3B1E; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;">✨ Clean White Cutout</div>
                             </div>
                             """, unsafe_allow_html=True)
                             st.image(cutout_img_preview, use_column_width=True)
