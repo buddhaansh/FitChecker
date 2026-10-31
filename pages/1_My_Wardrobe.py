@@ -90,14 +90,43 @@ if has_photos:
                 st.success(f"Successfully cleaned backgrounds for {count_cleaned} garments!")
                 st.rerun()
 
+# ── Palette Filter Bar (Matches Luxury Editorial Closet) ──
+wardrobe_df["palette_badge"] = wardrobe_df["color"].apply(lambda c: get_garment_palette_badge(str(c), season_curr)["badge"])
+
+total_items = len(wardrobe_df)
+count_best = int((wardrobe_df["palette_badge"] == "BEST MATCH").sum())
+count_warmth = int((wardrobe_df["palette_badge"] == "ADD WARMTH").sum())
+count_outside = int((~wardrobe_df["palette_badge"].isin(["BEST MATCH", "ADD WARMTH"])).sum())
+
+pal_options = [
+    f"ALL {total_items}",
+    f"BEST MATCHES {count_best}",
+    f"ADD WARMTH {count_warmth}",
+    f"OUTSIDE PALETTE {count_outside}",
+]
+
+p_col1, p_col2 = st.columns([1, 4])
+with p_col1:
+    st.markdown("<div style='font-size: 11px; font-weight: 800; color: #704E38; letter-spacing: 0.12em; text-transform: uppercase; padding-top: 10px;'>PALETTE HARMONY</div>", unsafe_allow_html=True)
+with p_col2:
+    selected_pal = st.radio("Palette Filter", pal_options, horizontal=True, label_visibility="collapsed", key="wardrobe_palette_radio")
+
+filtered = wardrobe_df.copy()
+if selected_pal:
+    if "BEST MATCHES" in selected_pal:
+        filtered = filtered[filtered["palette_badge"] == "BEST MATCH"]
+    elif "ADD WARMTH" in selected_pal:
+        filtered = filtered[filtered["palette_badge"] == "ADD WARMTH"]
+    elif "OUTSIDE PALETTE" in selected_pal:
+        filtered = filtered[~filtered["palette_badge"].isin(["BEST MATCH", "ADD WARMTH"])]
+
 # ── Filters ──
-with st.expander("🔍 Filter Wardrobe", expanded=False):
+with st.expander("🔍 Filter by Category, Color & Wear Status", expanded=False):
     f1, f2, f3 = st.columns(3)
     filter_cat   = f1.multiselect("Category",  sorted(wardrobe_df["category"].dropna().unique()))
     filter_color = f2.multiselect("Color",     sorted(wardrobe_df["color"].dropna().unique()))
     filter_worn  = f3.selectbox("Wear Status",  ["All", "Worn", "Never Worn"])
 
-filtered = wardrobe_df.copy()
 if filter_cat:
     filtered = filtered[filtered["category"].isin(filter_cat)]
 if filter_color:
@@ -107,10 +136,10 @@ if filter_worn == "Worn":
 elif filter_worn == "Never Worn":
     filtered = filtered[pd.to_numeric(filtered["times_worn"], errors="coerce").fillna(0) == 0]
 
-st.markdown(f"Showing **{len(filtered)}** of **{summary['total']}** items")
+st.markdown(f"Showing **{len(filtered)}** of **{summary['total']}** curated pieces")
 
-# ── Item Cards ──
-COLS_PER_ROW = 3
+# ── Item Cards (Editorial Studio Catalog) ──
+COLS_PER_ROW = 4
 items = filtered.to_dict("records")
 
 for row_start in range(0, len(items), COLS_PER_ROW):
@@ -118,6 +147,28 @@ for row_start in range(0, len(items), COLS_PER_ROW):
     for col_idx, item in enumerate(items[row_start : row_start + COLS_PER_ROW]):
         with cols[col_idx]:
             with st.container(border=True):
+                # Palette Badge
+                palette_b = get_garment_palette_badge(item.get("color", ""), season_curr)
+                b_text = palette_b["badge"]
+                if b_text == "BEST MATCH":
+                    badge_bg = "#2D5A27"
+                    badge_fg = "#FFFFFF"
+                elif b_text == "ADD WARMTH":
+                    badge_bg = "#8C4A28"
+                    badge_fg = "#FFFFFF"
+                else:
+                    badge_bg = "#756D65"
+                    badge_fg = "#FFFFFF"
+
+                # Editorial Studio Backdrop Container
+                st.markdown(f"""
+                <div style="background: #FAF7F2; border: 1.5px solid #EBE4DA; border-radius: 12px; padding: 10px 8px; margin-bottom: 8px; text-align: center; box-shadow: 0 4px 12px rgba(74, 53, 43, 0.03);">
+                    <div style="display: flex; justify-content: flex-start; margin-bottom: 4px;">
+                        <span style="background: {badge_bg}; color: {badge_fg}; font-size: 9.5px; font-weight: 800; padding: 2px 8px; border-radius: 8px; letter-spacing: 0.04em;">{b_text}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
                 # Photo
                 photo = str(item.get("photo_path", "")).strip()
                 if photo and os.path.exists(photo):
@@ -130,19 +181,17 @@ for row_start in range(0, len(items), COLS_PER_ROW):
                     color_name = item.get("color", "grey").lower()
                     st.markdown(
                         f"<div style='background:{item.get('color_hex','#808080') or '#808080'};"
-                        f"height:80px;border-radius:6px;margin-bottom:8px;'></div>",
+                        f"height:120px;border-radius:8px;margin-bottom:8px;'></div>",
                         unsafe_allow_html=True
                     )
 
                 # Details
-                palette_b = get_garment_palette_badge(item.get("color", ""), season_curr)
-                st.markdown(f"<span style='font-size:10px; font-weight:700; background:#F2ECE4; color:#8C3B1E; padding:2px 8px; border-radius:10px; display:inline-block; margin-bottom:4px;'>{palette_b['badge']}</span>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:16px; font-weight:700; color:#241C18; margin-bottom:4px;'>{item.get('color','')} {item.get('category','')}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:13.5px; font-weight:500; color:#8C5835; margin-bottom:2px;'>Pattern: {item.get('pattern','—')} &nbsp;|&nbsp; Formality: {'⭐' * int(item.get('formality', 3))}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size:13.5px; font-weight:500; color:#8C5835; margin-bottom:4px;'>Worn: {item.get('times_worn', 0)}× &nbsp;|&nbsp; Last: {item.get('last_worn','—') or '—'}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:15px; font-weight:700; color:#241C18; margin-bottom:3px;'>{item.get('color','')} {item.get('category','')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:12.5px; font-weight:500; color:#8C5835; margin-bottom:2px;'>Pattern: {item.get('pattern','—')} &nbsp;|&nbsp; {'⭐' * int(item.get('formality', 3))}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:12px; font-weight:500; color:#8C5835; margin-bottom:4px;'>Worn: {item.get('times_worn', 0)}× &nbsp;|&nbsp; Last: {item.get('last_worn','—') or '—'}</div>", unsafe_allow_html=True)
 
                 if item.get("is_sample"):
-                    st.markdown("<div style='font-size:12px; font-weight:600; color:#B85D3B; margin-bottom:6px;'>🏷️ Sample data</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:11px; font-weight:600; color:#B85D3B; margin-bottom:4px;'>🏷️ Sample data</div>", unsafe_allow_html=True)
 
                 # Actions
                 exp = st.expander("Edit / Delete / Clean")
