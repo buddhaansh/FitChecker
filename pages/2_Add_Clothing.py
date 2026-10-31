@@ -182,7 +182,8 @@ with tab_scan:
                             </div>
                             """, unsafe_allow_html=True)
                             st.image(cutout_img_preview, use_column_width=True)
-                        except Exception:
+                        except Exception as e:
+                            st.error(f"Cutout error: {e}")
                             st.image(file_bytes, caption="Scanned Garment", use_column_width=True)
                 else:
                     st.image(file_bytes, caption="Scanned Garment", use_column_width=True)
