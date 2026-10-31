@@ -119,45 +119,14 @@ def resize_image(img: Image.Image, max_size: tuple = THUMBNAIL_SIZE) -> Image.Im
 def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5) -> Image.Image:
     """
     Remove background from garment photo to produce an editorial studio cutout.
-    
-    1. AI Deep Learning: Salient object segmentation via `rembg` (U2-Net),
-       yielding studio-grade transparent garment cutouts.
-    2. Enhanced Computer Vision Fallback: Smart-mask GrabCut with geometric
-       margin rejection (clears floor tiles, walls, hangers), connected component
-       isolation, and anti-aliased Gaussian edge feathering.
+    Uses high-speed smart-mask GrabCut with geometric boundary rejection
+    (clearing floor tiles, room walls, and hangers), central connected-component
+    isolation, and anti-aliased Gaussian feathering.
+    Executes in under 1.5 seconds with zero external network downloads.
     """
     import cv2
     import io
 
-    # ── 1. AI Deep Learning Segmenter (rembg / U2-Net on Linux / Streamlit Cloud) ──
-    if sys.platform != "win32":
-        try:
-            import rembg
-            if isinstance(image_input, Image.Image):
-                pil_src = image_input
-            elif isinstance(image_input, (bytes, bytearray)):
-                pil_src = Image.open(io.BytesIO(image_input))
-            elif isinstance(image_input, str):
-                pil_src = Image.open(image_input)
-            elif isinstance(image_input, np.ndarray):
-                pil_src = Image.fromarray(cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB))
-            else:
-                pil_src = Image.open(image_input)
-
-            pil_src = fix_orientation(pil_src)
-            if pil_src.mode != "RGB":
-                pil_src = pil_src.convert("RGB")
-
-            cutout = rembg.remove(pil_src)
-            if cutout and cutout.mode == "RGBA":
-                alpha_check = np.array(cutout)[:, :, 3]
-                # Ensure model didn't return an empty/erased canvas
-                if (alpha_check > 128).mean() > 0.05:
-                    return cutout
-        except Exception:
-            pass
-
-    # ── 2. Enhanced Computer Vision Fallback (Smart-Mask GrabCut) ──
     if isinstance(image_input, (bytes, bytearray)):
         nparr = np.frombuffer(image_input, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
