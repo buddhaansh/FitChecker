@@ -128,8 +128,15 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
     import io
 
     if isinstance(image_input, (bytes, bytearray)):
-        nparr = np.frombuffer(image_input, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        try:
+            pil_decoded = Image.open(io.BytesIO(image_input))
+            pil_decoded = fix_orientation(pil_decoded)
+            if pil_decoded.mode != "RGB":
+                pil_decoded = pil_decoded.convert("RGB")
+            img = cv2.cvtColor(np.array(pil_decoded), cv2.COLOR_RGB2BGR)
+        except Exception:
+            nparr = np.frombuffer(image_input, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     elif isinstance(image_input, str):
         img = cv2.imread(str(image_input))
     elif isinstance(image_input, Image.Image):
