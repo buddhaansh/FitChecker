@@ -357,7 +357,17 @@ def suggest_garment_attributes(
         is_patterned = sil.get("is_patterned", False)
         has_collar = sil.get("has_collar", False)
 
-        if has_placket or is_patterned or (has_collar and ar >= 1.15):
+        is_formal_dark = color_name in ("black", "charcoal", "dark grey", "navy blue", "dark blue")
+
+        # Check Blazer / Suit Jacket FIRST for structured dark tailoring with lapels
+        if is_formal_dark and (has_collar or has_placket or sil.get("shoulder_taper", False) or ar <= 1.35):
+            category = "Blazer"
+            confidence = 0.90
+            reason = f"Structured lapels and tailored silhouette in formal {color_name} indicates a Blazer or Suit Jacket."
+            formality = 4
+            fit = "Regular"
+            style_tags = ["Formal", "Smart Casual"]
+        elif has_placket or is_patterned or (has_collar and ar >= 1.15):
             category = "Shirt"
             pattern_desc = "plaid/check pattern" if is_patterned else "collared button-down structure"
             confidence = 0.92
@@ -365,13 +375,6 @@ def suggest_garment_attributes(
             formality = 3
             fit = "Regular"
             style_tags = ["Smart Casual", "Preppy", "Casual"]
-        elif color_name in ("black", "charcoal", "dark grey") and sil.get("shoulder_taper"):
-            category = "Blazer"
-            confidence = 0.82
-            reason = f"Structured shoulder-tapered silhouette in formal {color_name} indicates Blazer or Jacket."
-            formality = 4
-            fit = "Regular"
-            style_tags = ["Formal", "Smart Casual"]
         elif color_name in ("navy blue", "dark blue", "blue") and is_tall:
             # Preserves test case for blue tall top
             category = "Shirt"

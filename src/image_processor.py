@@ -118,14 +118,46 @@ def resize_image(img: Image.Image, max_size: tuple = THUMBNAIL_SIZE) -> Image.Im
 
 def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5) -> Image.Image:
     """
-    Remove background from garment photo using adaptive GrabCut segmentation with
-    bounding-frame background initialization, inter-leg cavity clearance, and smooth feathering.
-    Accurately preserves multi-colored patterns (plaid, stripes, prints) while excising room backgrounds.
-    Produces a clean, transparent RGBA PIL Image isolating the primary garment.
+    Remove background from garment photo to produce an editorial studio cutout.
+    
+    1. AI Deep Learning: Salient object segmentation via `rembg` (U2-Net),
+       yielding studio-grade transparent garment cutouts.
+    2. Enhanced Computer Vision Fallback: Smart-mask GrabCut with geometric
+       margin rejection (clears floor tiles, walls, hangers), connected component
+       isolation, and anti-aliased Gaussian edge feathering.
     """
     import cv2
     import io
 
+    # ── 1. AI Deep Learning Segmenter (rembg / U2-Net on Linux / Streamlit Cloud) ──
+    if sys.platform != "win32":
+        try:
+            import rembg
+            if isinstance(image_input, Image.Image):
+                pil_src = image_input
+            elif isinstance(image_input, (bytes, bytearray)):
+                pil_src = Image.open(io.BytesIO(image_input))
+            elif isinstance(image_input, str):
+                pil_src = Image.open(image_input)
+            elif isinstance(image_input, np.ndarray):
+                pil_src = Image.fromarray(cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB))
+            else:
+                pil_src = Image.open(image_input)
+
+            pil_src = fix_orientation(pil_src)
+            if pil_src.mode != "RGB":
+                pil_src = pil_src.convert("RGB")
+
+            cutout = rembg.remove(pil_src)
+            if cutout and cutout.mode == "RGBA":
+                alpha_check = np.array(cutout)[:, :, 3]
+                # Ensure model didn't return an empty/erased canvas
+                if (alpha_check > 128).mean() > 0.05:
+                    return cutout
+        except Exception:
+            pass
+
+    # ── 2. Enhanced Computer Vision Fallback (Smart-Mask GrabCut) ──
     if isinstance(image_input, (bytes, bytearray)):
         nparr = np.frombuffer(image_input, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -164,17 +196,31 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
         proc_h, proc_w = orig_h, orig_w
 
     try:
-        # Bounding frame initialization: outer margin is background, interior is target
-        bx = max(int(proc_w * margin_pct), 3)
-        by = max(int(proc_h * margin_pct), 3)
-        rect = (bx, by, proc_w - 2 * bx, proc_h - 2 * by)
+        # Smart Mask Initialization:
+        # Outer margins (floor tiles, chair legs, side walls, hanger hook) -> Definite Background
+        mask = np.full((proc_h, proc_w), cv2.GC_PR_BGD, dtype=np.uint8)
 
-        mask = np.zeros((proc_h, proc_w), np.uint8)
+        # Center garment zone -> Probably Foreground
+        cx1, cx2 = max(1, int(proc_w * 0.09)), min(proc_w - 1, int(proc_w * 0.91))
+        cy1, cy2 = max(1, int(proc_h * 0.05)), min(proc_h - 1, int(proc_h * 0.87))
+        mask[cy1:cy2, cx1:cx2] = cv2.GC_PR_FGD
+
+        # Deep core -> Definite Foreground
+        dcx1, dcx2 = max(1, int(proc_w * 0.24)), min(proc_w - 1, int(proc_w * 0.76))
+        dcy1, dcy2 = max(1, int(proc_h * 0.15)), min(proc_h - 1, int(proc_h * 0.70))
+        mask[dcy1:dcy2, dcx1:dcx2] = cv2.GC_FGD
+
+        # Definite background margins (clears hanger, floor tiles, and side walls)
+        mask[:max(2, int(proc_h * 0.05)), :] = cv2.GC_BGD
+        mask[min(proc_h - 2, int(proc_h * 0.87)):, :] = cv2.GC_BGD
+        mask[:, :max(2, int(proc_w * 0.08))] = cv2.GC_BGD
+        mask[:, min(proc_w - 2, int(proc_w * 0.92)):] = cv2.GC_BGD
+
         bgd_model = np.zeros((1, 65), np.float64)
         fgd_model = np.zeros((1, 65), np.float64)
 
         # Multi-modal GMM Graph-Cut optimization
-        cv2.grabCut(proc_img, mask, rect, bgd_model, fgd_model, iter_count, cv2.GC_INIT_WITH_RECT)
+        cv2.grabCut(proc_img, mask, None, bgd_model, fgd_model, iter_count, cv2.GC_INIT_WITH_MASK)
         fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
 
         # Connected Component Analysis — retain the primary scanned garment
