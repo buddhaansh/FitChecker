@@ -178,25 +178,31 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
 
         # Center garment zone -> Probably Foreground
         cx1, cx2 = max(1, int(proc_w * 0.09)), min(proc_w - 1, int(proc_w * 0.91))
-        cy1, cy2 = max(1, int(proc_h * 0.05)), min(proc_h - 1, int(proc_h * 0.87))
+        cy1, cy2 = max(1, int(proc_h * 0.07)), min(proc_h - 1, int(proc_h * 0.89))
         mask[cy1:cy2, cx1:cx2] = cv2.GC_PR_FGD
 
         # Deep core -> Definite Foreground
-        dcx1, dcx2 = max(1, int(proc_w * 0.24)), min(proc_w - 1, int(proc_w * 0.76))
-        dcy1, dcy2 = max(1, int(proc_h * 0.15)), min(proc_h - 1, int(proc_h * 0.70))
+        dcx1, dcx2 = max(1, int(proc_w * 0.25)), min(proc_w - 1, int(proc_w * 0.75))
+        dcy1, dcy2 = max(1, int(proc_h * 0.20)), min(proc_h - 1, int(proc_h * 0.72))
         mask[dcy1:dcy2, dcx1:dcx2] = cv2.GC_FGD
 
         # Definite background margins (clears hanger, floor tiles, and side walls)
-        mask[:max(2, int(proc_h * 0.05)), :] = cv2.GC_BGD
-        mask[min(proc_h - 2, int(proc_h * 0.87)):, :] = cv2.GC_BGD
-        mask[:, :max(2, int(proc_w * 0.08))] = cv2.GC_BGD
-        mask[:, min(proc_w - 2, int(proc_w * 0.92)):] = cv2.GC_BGD
+        mask[:max(2, int(proc_h * 0.07)), :] = cv2.GC_BGD
+        mask[min(proc_h - 2, int(proc_h * 0.89)):, :] = cv2.GC_BGD
+        mask[:, :max(2, int(proc_w * 0.09))] = cv2.GC_BGD
+        mask[:, min(proc_w - 2, int(proc_w * 0.91)):] = cv2.GC_BGD
+
+        # Blue/bright plastic hanger hook clearance in upper 30%
+        hsv = cv2.cvtColor(proc_img, cv2.COLOR_BGR2HSV)
+        blue_hanger = cv2.inRange(hsv, (90, 45, 45), (135, 255, 255))
+        blue_hanger[int(proc_h * 0.30):, :] = 0
+        mask[blue_hanger > 0] = cv2.GC_BGD
 
         bgd_model = np.zeros((1, 65), np.float64)
         fgd_model = np.zeros((1, 65), np.float64)
 
         # Multi-modal GMM Graph-Cut optimization
-        cv2.grabCut(proc_img, mask, None, bgd_model, fgd_model, iter_count, cv2.GC_INIT_WITH_MASK)
+        cv2.grabCut(proc_img, mask, None, bgd_model, fgd_model, max(iter_count, 6), cv2.GC_INIT_WITH_MASK)
         fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
 
         # Connected Component Analysis — retain the primary scanned garment
@@ -215,6 +221,11 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
         else:
             clean_fg = fg
 
+        # Fill internal holes (inner lining, buttons, fabric shadows)
+        cnts, _ = cv2.findContours(clean_fg.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if cnts:
+            cv2.drawContours(clean_fg, cnts, -1, 255, thickness=cv2.FILLED)
+
         # Inter-Leg / Crotch Cavity Clearance (for trousers & shorts)
         ext_cnts, _ = cv2.findContours(clean_fg.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if ext_cnts:
@@ -232,7 +243,7 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
                         far = tuple(main_cnt[f][0])
                         depth = depth_raw / 256.0
                         # Inter-leg cavity starts in lower half and extends upward into the crotch
-                        if start[1] > proc_h * 0.45 and end[1] > proc_h * 0.45 and far[1] < min(start[1], end[1]) and depth > (proc_h * 0.08):
+                        if start[1] > proc_h * 0.40 and end[1] > proc_h * 0.40 and far[1] < min(start[1], end[1]) and depth > (proc_h * 0.08):
                             if depth > max_depth:
                                 max_depth = depth
                                 best_defect = (start, end, far)
@@ -255,7 +266,7 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
             final_mask = clean_fg
 
         # Smooth anti-aliased edge feathering
-        alpha = cv2.GaussianBlur(final_mask, (7, 7), 0)
+        alpha = cv2.GaussianBlur(final_mask, (5, 5), 0)
 
     except Exception:
         # Fallback to standard rectangular margin if unexpected error occurs
@@ -285,7 +296,8 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
 def save_garment_image(
     file_bytes: bytes,
     original_filename: str,
-    auto_remove_bg: bool = False
+    auto_remove_bg: bool = False,
+    precomputed_cutout: Optional[Image.Image] = None
 ) -> tuple[str, str]:
     """
     Process and save an uploaded garment image.
@@ -293,7 +305,7 @@ def save_garment_image(
     STEPS:
       1. Fix orientation.
       2. Resize.
-      3. If auto_remove_bg: extract transparent cutout.
+      3. If auto_remove_bg: extract transparent cutout (or use precomputed).
       4. Save as PNG with transparency (or JPEG fallback).
 
     Returns (saved_path, error_message).
@@ -311,7 +323,7 @@ def save_garment_image(
 
         if auto_remove_bg:
             try:
-                cutout_img = remove_background(img)
+                cutout_img = precomputed_cutout if precomputed_cutout is not None else remove_background(img)
                 filename = f"garment_{uid}.png"
                 filepath = os.path.join(IMAGES_DIR, filename)
                 cutout_img.save(filepath, format="PNG")

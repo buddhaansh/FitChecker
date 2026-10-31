@@ -176,12 +176,13 @@ with tab_scan:
                     with st.spinner("Isolating garment onto clean white background..."):
                         try:
                             cutout_img_preview = remove_background(file_bytes)
+                            st.session_state["cached_cutout_preview"] = cutout_img_preview
                             st.markdown("""
                             <div style="background: #FFFFFF; border: 1.5px solid #E5E0D8; border-radius: 12px; padding: 10px 8px 4px 8px; margin-bottom: 8px; text-align: center; box-shadow: 0 4px 12px rgba(74, 53, 43, 0.04);">
                                 <div style="font-size: 11px; font-weight: 800; color: #8C3B1E; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;">✨ Clean White Cutout</div>
                             </div>
                             """, unsafe_allow_html=True)
-                            st.image(cutout_img_preview, use_column_width=True)
+                            st.image(cutout_img_preview.convert("RGB"), use_column_width=True)
                         except Exception as e:
                             st.error(f"Cutout error: {e}")
                             st.image(file_bytes, caption="Scanned Garment", use_column_width=True)
@@ -287,7 +288,12 @@ with tab_scan:
                 save_btn = st.form_submit_button("✨ Save to Digital Wardrobe", type="primary", use_container_width=True)
 
             if save_btn:
-                saved_path, img_err = save_garment_image(file_bytes, filename, auto_remove_bg=auto_bg)
+                cached_cutout = st.session_state.get("cached_cutout_preview")
+                saved_path, img_err = save_garment_image(
+                    file_bytes, filename,
+                    auto_remove_bg=auto_bg,
+                    precomputed_cutout=cached_cutout
+                )
                 garment = {
                     "category":    p_category,
                     "color":       p_color,

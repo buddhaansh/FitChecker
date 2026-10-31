@@ -359,7 +359,14 @@ def suggest_garment_attributes(
 
         is_formal_dark = color_name in ("black", "charcoal", "dark grey", "navy blue", "dark blue")
 
-        if has_placket or is_patterned or (has_collar and ar >= 1.05):
+        if (ar <= 1.25) and (has_collar or sil.get("shoulder_taper", False)) and (is_formal_dark or color_name in ("khaki", "beige", "grey", "brown")):
+            category = "Blazer"
+            confidence = 0.90
+            reason = f"Structured tailored silhouette (h/w={ar:.2f}) with lapel/collar profile in formal {color_name} indicates a Blazer or Suit Jacket."
+            formality = 4
+            fit = "Regular"
+            style_tags = ["Formal", "Smart Casual"]
+        elif has_placket or is_patterned or (has_collar and ar >= 1.05) or (ar >= 1.28 and is_formal_dark) or (color_name in ("navy blue", "dark blue", "blue") and is_tall):
             category = "Shirt"
             pattern_desc = "plaid/check pattern" if is_patterned else "collared button-down structure"
             confidence = 0.92
@@ -367,21 +374,6 @@ def suggest_garment_attributes(
             formality = 3
             fit = "Regular"
             style_tags = ["Smart Casual", "Preppy", "Casual"]
-        elif is_formal_dark and sil.get("shoulder_taper", False) and ar <= 1.25:
-            category = "Blazer"
-            confidence = 0.88
-            reason = f"Structured shoulder-tapered silhouette in formal {color_name} indicates a Blazer or Jacket."
-            formality = 4
-            fit = "Regular"
-            style_tags = ["Formal", "Smart Casual"]
-        elif color_name in ("navy blue", "dark blue", "blue") and is_tall:
-            # Preserves test case for blue tall top
-            category = "Shirt"
-            confidence = 0.76
-            reason = f"Elongated upper drape in blue indicates a Button-Down Shirt."
-            formality = 3
-            fit = "Regular"
-            style_tags = ["Smart Casual", "Preppy"]
         elif color_name in ("brown", "dark brown") and is_wide:
             category = "Sandals"
             confidence = 0.70
