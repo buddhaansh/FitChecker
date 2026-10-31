@@ -13,7 +13,8 @@ from src.wardrobe_manager import get_wardrobe_summary
 from src.skin_tone_analyzer import load_profile, get_garment_palette_badge
 from src.theme_helper import apply_editorial_theme
 from src.image_processor import remove_background
-from config.settings import CATEGORIES, PATTERNS, SEASONS, WEATHER_OPTIONS, FIT_OPTIONS, STYLE_TAGS, AVAILABLE_COLORS
+from src.color_compatibility import AVAILABLE_COLORS
+from config.settings import CATEGORIES, PATTERNS, SEASONS, WEATHER_OPTIONS, FIT_OPTIONS, STYLE_TAGS
 
 st.set_page_config(page_title="Wardrobe Collection", page_icon="🧥", layout="wide")
 

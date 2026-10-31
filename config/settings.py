@@ -90,6 +90,19 @@ STYLE_TAGS = [
     "Sporty", "Bohemian", "Minimalist", "Preppy", "Party",
 ]
 
+# Color options (derived from color compatibility engine)
+try:
+    from src.color_compatibility import AVAILABLE_COLORS
+except Exception:
+    AVAILABLE_COLORS = [
+        "beige", "black", "blue", "brown", "charcoal", "cream", "cyan",
+        "dark blue", "dark brown", "dark green", "dark grey", "gray", "green",
+        "grey", "hot pink", "khaki", "lavender", "light blue", "light grey",
+        "light pink", "maroon", "mint green", "mustard", "navy blue",
+        "off white", "olive green", "orange", "pink", "purple", "red",
+        "rust", "sky blue", "tan", "teal", "white", "yellow"
+    ]
+
 # ─────────────────────────────────────────────
 # OCCASIONS
 # ─────────────────────────────────────────────
