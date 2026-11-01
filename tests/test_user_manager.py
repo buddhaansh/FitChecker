@@ -9,7 +9,8 @@ import pandas as pd
 from src.user_manager import (
     DEFAULT_ADMIN_USER, sanitize_username, get_active_user, set_active_user,
     get_user_data_dir, get_user_wardrobe_file, get_user_profile_file,
-    list_users, create_user, delete_user
+    list_users, create_user, delete_user, get_master_pin, set_master_pin,
+    verify_master_pin, is_master_authenticated, logout_master
 )
 from src.data_manager import load_wardrobe, save_wardrobe, add_garment, import_sample_data
 from src.skin_tone_analyzer import load_profile, save_profile
@@ -89,3 +90,23 @@ def test_seed_capsule_for_user():
     count = import_sample_data(user_id="Priya")
     assert count == 25
     assert len(load_wardrobe(user_id="Priya")) == 25
+
+
+def test_master_pin_authentication():
+    assert verify_master_pin("wrong_pin") is False
+    assert verify_master_pin("7777") is True
+
+
+def test_update_master_pin():
+    original = get_master_pin()
+    assert set_master_pin("9999") is True
+    assert get_master_pin() == "9999"
+    assert verify_master_pin("9999") is True
+    assert verify_master_pin(original) is False
+
+    # Short pin rejection
+    assert set_master_pin("12") is False
+
+    # Restore default
+    set_master_pin("7777")
+    assert get_master_pin() == "7777"

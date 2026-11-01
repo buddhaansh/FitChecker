@@ -24,7 +24,8 @@ from config.settings import (
 from src.user_manager import (
     DEFAULT_ADMIN_USER, get_active_user, set_active_user, list_users,
     create_user, delete_user, get_user_data_dir, get_user_wardrobe_file,
-    get_user_images_dir
+    get_user_images_dir, is_master_authenticated, verify_master_pin,
+    get_master_pin, set_master_pin, logout_master
 )
 from src.data_manager import load_wardrobe, save_wardrobe, import_sample_data
 from src.theme_helper import apply_editorial_theme
@@ -39,32 +40,48 @@ st.set_page_config(
 # Apply editorial styling and sidebar user switcher
 apply_editorial_theme()
 
-current_user = get_active_user()
-is_admin = (current_user == DEFAULT_ADMIN_USER)
-
-# Page Header
-st.title("⚙️ Creator & Admin Control Center")
-st.caption(f"Master administrative management and multi-user closet hub · Active: **{current_user}**")
-
-# Admin Notice banner
-if is_admin:
+# Master Security Gatekeeper: Block unauthorized access completely
+if not is_master_authenticated():
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #4A352B 0%, #2E2019 100%); color: #F5EFEB; border-radius: 14px; padding: 18px 24px; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(46, 32, 25, 0.15);">
-        <div style="font-family: 'Playfair Display', Georgia, serif; font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px;">
-            👑 Welcome, Master Creator (BUDZ)
+    <div style="background: #FFFFFF; border: 1.5px solid #DDD1C2; border-radius: 14px; padding: 36px 28px; text-align: center; max-width: 520px; margin: 30px auto; box-shadow: 0 4px 16px rgba(74, 53, 43, 0.06);">
+        <div style="font-size: 42px; margin-bottom: 12px;">🔒👑</div>
+        <div style="font-family: 'Playfair Display', Georgia, serif; font-size: 22px; font-weight: 700; color: #241C18; margin-bottom: 8px;">
+            Master Creator Access Only
         </div>
-        <div style="font-size: 13.5px; opacity: 0.9; line-height: 1.5;">
-            You have full administrative privileges to oversee all friend and guest wardrobes, push updates, seed sample capsules, inspect cutouts, and manage system backups.
+        <div style="font-size: 13.5px; color: #704E38; margin-bottom: 20px; line-height: 1.5;">
+            This control center oversees all user wardrobes, backups, and administrative settings. Enter your Master PIN to unlock privileges.
         </div>
     </div>
     """, unsafe_allow_html=True)
-else:
-    st.warning(f"You are currently viewing this hub as **{current_user}** (Guest Mode). Administrative actions and batch maintenance are managed by BUDZ.")
-    col_sw, _ = st.columns([1.5, 3])
-    with col_sw:
-        if st.button("👑 Switch to BUDZ (Admin)", type="primary"):
-            set_active_user(DEFAULT_ADMIN_USER)
-            st.rerun()
+    c_p1, c_p2, c_p3 = st.columns([1, 1.6, 1])
+    with c_p2:
+        with st.form("admin_pin_form"):
+            entered_pin = st.text_input("Master PIN", type="password", placeholder="Enter PIN")
+            sub_pin = st.form_submit_button("Unlock Creator Controls", type="primary", use_container_width=True)
+            if sub_pin:
+                if verify_master_pin(entered_pin):
+                    set_active_user(DEFAULT_ADMIN_USER)
+                    st.success("Master Creator Privileges Verified!")
+                    st.rerun()
+                else:
+                    st.error("Incorrect Master PIN.")
+    st.stop()
+
+# Page Header (Only visible to verified Master Creator)
+current_user = get_active_user()
+st.title("⚙️ Creator & Admin Control Center")
+st.caption(f"Master administrative management and multi-user closet hub · Active Master: **{current_user}**")
+
+st.markdown("""
+<div style="background: linear-gradient(135deg, #4A352B 0%, #2E2019 100%); color: #F5EFEB; border-radius: 14px; padding: 18px 24px; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(46, 32, 25, 0.15);">
+    <div style="font-family: 'Playfair Display', Georgia, serif; font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px;">
+        👑 Welcome, Master Creator (BUDZ)
+    </div>
+    <div style="font-size: 13.5px; opacity: 0.9; line-height: 1.5;">
+        You have master administrative privileges to oversee all friend and guest wardrobes, push updates, seed sample capsules, inspect cutouts, and manage system backups.
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 tab_users, tab_ops, tab_diag, tab_system = st.tabs([
     "👥 User Wardrobes Overview",
@@ -308,3 +325,23 @@ with tab_system:
         })
 
     st.dataframe(pd.DataFrame(user_storage_rows), use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("### 🔐 Master Creator Security PIN")
+    st.caption("Change the PIN used to unlock administrative privileges and switch between closets.")
+    col_p1, _ = st.columns([1.5, 2])
+    with col_p1:
+        with st.form("change_pin_form"):
+            new_p1 = st.text_input("New Master PIN (at least 4 digits)", type="password")
+            new_p2 = st.text_input("Confirm New Master PIN", type="password")
+            btn_save_p = st.form_submit_button("Update Master PIN", type="primary")
+            if btn_save_p:
+                if not new_p1 or len(new_p1.strip()) < 4:
+                    st.error("PIN must be at least 4 characters long.")
+                elif new_p1 != new_p2:
+                    st.error("PINs do not match.")
+                else:
+                    if set_master_pin(new_p1.strip()):
+                        st.success("Master PIN updated successfully!")
+                    else:
+                        st.error("Failed to update Master PIN.")
