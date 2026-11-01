@@ -43,4 +43,6 @@ Thumbs.db
 # User uploaded data / test images
 user_data/images/*
 !user_data/images/.gitkeep
+user_data/users/**/images/*
+!user_data/users/**/images/.gitkeep
 

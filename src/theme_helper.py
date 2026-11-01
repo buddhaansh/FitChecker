@@ -227,6 +227,12 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 </style>
 """
 
-def apply_editorial_theme():
+def apply_editorial_theme(show_user_nav: bool = True):
     """Inject the centralized warm light-brown & editorial theme into Streamlit."""
     st.markdown(THEME_CSS, unsafe_allow_html=True)
+    if show_user_nav:
+        try:
+            from src.user_manager import render_user_nav_widget
+            render_user_nav_widget()
+        except Exception:
+            pass

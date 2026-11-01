@@ -466,25 +466,31 @@ def get_default_profile() -> Dict[str, Any]:
     }
 
 
-def load_profile() -> Dict[str, Any]:
-    """Load profile from json or return default."""
-    if os.path.exists(PROFILE_FILE):
+def load_profile(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Load user profile from JSON or return default."""
+    from src.user_manager import get_user_profile_file, get_active_user
+    target_file = get_user_profile_file(user_id)
+    uid = user_id or get_active_user()
+    defaults = get_default_profile()
+    defaults["name"] = uid
+    if os.path.exists(target_file):
         try:
-            with open(PROFILE_FILE, "r", encoding="utf-8") as f:
+            with open(target_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                defaults = get_default_profile()
                 defaults.update(data)
                 return defaults
         except Exception:
             pass
-    return get_default_profile()
+    return defaults
 
 
-def save_profile(profile_data: Dict[str, Any]) -> bool:
-    """Save profile to JSON."""
-    os.makedirs(USER_DATA_DIR, exist_ok=True)
+def save_profile(profile_data: Dict[str, Any], user_id: Optional[str] = None) -> bool:
+    """Save user profile to JSON."""
+    from src.user_manager import get_user_profile_file
+    target_file = get_user_profile_file(user_id)
+    os.makedirs(os.path.dirname(target_file), exist_ok=True)
     try:
-        with open(PROFILE_FILE, "w", encoding="utf-8") as f:
+        with open(target_file, "w", encoding="utf-8") as f:
             json.dump(profile_data, f, indent=2)
         return True
     except Exception:

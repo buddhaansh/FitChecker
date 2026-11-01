@@ -36,6 +36,8 @@ from config.settings import (
 )
 from src.data_manager import load_wardrobe, save_wardrobe, import_sample_data, add_garment
 from src.wardrobe_manager import get_wardrobe_summary
+from src.theme_helper import apply_editorial_theme
+from src.user_manager import get_active_user
 from src.skin_tone_analyzer import (
     load_profile, save_profile, analyze_face_image,
     SEASON_PALETTES, COMPLEXION_PALETTES, SHADES_24,
@@ -71,15 +73,19 @@ STAPLE_ACCESSORIES = [
     {"item_id": "staple_acc_black_shades", "category": "Sunglasses", "color": "Black", "formality": 2, "fit": "Regular", "color_hex": "#1E1E1E", "brand": "Matte Black Sunglasses (Staple)"},
 ]
 
-# Load state
-wardrobe_df = load_wardrobe()
-profile     = load_profile()
+# Resolve active isolated user space and apply unified editorial theme
+active_user = get_active_user()
+apply_editorial_theme()
 
-# Ensure default name is BUDZ and gender is Boy (him)
-if profile.get("name") in ["Pauline", ""]:
+# Load state for active user
+wardrobe_df = load_wardrobe(user_id=active_user)
+profile     = load_profile(user_id=active_user)
+
+# If default profile name is unset, initialize appropriately
+if active_user == "BUDZ" and profile.get("name") in ["Pauline", "", None]:
     profile["name"] = "BUDZ"
     profile["gender"] = "Boy"
-    save_profile(profile)
+    save_profile(profile, user_id=active_user)
 
 palette_data = resolve_palette(profile.get("palette_tier", profile.get("season", "medium_golden")))
 active_palette_key = profile.get("palette_tier", profile.get("season", "medium_golden"))

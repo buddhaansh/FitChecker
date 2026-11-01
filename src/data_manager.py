@@ -20,6 +20,7 @@ import uuid
 import json
 import shutil
 from datetime import datetime
+from typing import Optional, Dict, Any, List, Union
 
 import pandas as pd
 import numpy as np
@@ -31,7 +32,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import (
     WARDROBE_FILE, FEEDBACK_FILE, PREFERENCES_FILE,
     WEAR_HISTORY_FILE, OUTFITS_FILE, USER_DATA_DIR,
-    SAMPLE_WARDROBE_FILE, SAMPLE_FEEDBACK_FILE,
+    SAMPLE_WARDROBE_FILE, SAMPLE_FEEDBACK_FILE, IMAGES_DIR,
+)
+from src.user_manager import (
+    get_active_user, get_user_wardrobe_file, get_user_images_dir,
+    get_user_feedback_file, get_user_preferences_file, get_user_wear_history_file
 )
 
 # ─────────────────────────────────────────────
@@ -144,17 +149,20 @@ def _enforce_schema(df: pd.DataFrame, schema: dict) -> pd.DataFrame:
 # WARDROBE CSV OPERATIONS
 # ─────────────────────────────────────────────
 
-def load_wardrobe() -> pd.DataFrame:
+def load_wardrobe(user_id: Optional[str] = None) -> pd.DataFrame:
     """
     Load the user's wardrobe from CSV.
     Returns an empty DataFrame (with correct columns) if no file exists yet.
-    Also synchronizes resiliently with Streamlit session state if available.
+    Supports multi-user isolated closets and session state caching.
     """
     ensure_user_data_dirs()
+    target_file = get_user_wardrobe_file(user_id)
+    uid = user_id or get_active_user()
     df = _empty_wardrobe()
-    if os.path.exists(WARDROBE_FILE):
+
+    if os.path.exists(target_file):
         try:
-            df = pd.read_csv(WARDROBE_FILE, dtype=str)
+            df = pd.read_csv(target_file, dtype=str)
             df = _enforce_schema(df, WARDROBE_SCHEMA)
             # Ensure string columns never contain NaN floats
             for col in WARDROBE_SCHEMA.keys():
@@ -165,16 +173,20 @@ def load_wardrobe() -> pd.DataFrame:
             df["times_worn"]  = pd.to_numeric(df["times_worn"],  errors="coerce").fillna(0).astype(int)
             df["is_sample"]   = df["is_sample"].map({"True": True, "False": False, True: True, False: False}).fillna(False)
 
-            # Resilient path resolution across operating systems (Windows <-> Linux/Cloud)
+            # Resilient path resolution across operating systems and users
+            user_img_dir = get_user_images_dir(uid)
             if "photo_path" in df.columns:
                 def _normalize_photo(p):
                     if not p:
                         return ""
                     if not os.path.exists(str(p)):
                         fname = os.path.basename(str(p))
-                        cand = os.path.join(IMAGES_DIR, fname)
-                        if os.path.exists(cand):
-                            return cand
+                        cand_user = os.path.join(user_img_dir, fname)
+                        if os.path.exists(cand_user):
+                            return cand_user
+                        cand_global = os.path.join(IMAGES_DIR, fname)
+                        if os.path.exists(cand_global):
+                            return cand_global
                     return str(p)
                 df["photo_path"] = df["photo_path"].apply(_normalize_photo)
 
@@ -182,27 +194,31 @@ def load_wardrobe() -> pd.DataFrame:
             print(f"[data_manager] Warning: could not load wardrobe — {e}")
             df = _empty_wardrobe()
 
-    # Session State Resilient Sync across Streamlit runs
-    try:
-        import streamlit as st
-        if "wardrobe_df" in st.session_state and isinstance(st.session_state["wardrobe_df"], pd.DataFrame):
-            sess_df = st.session_state["wardrobe_df"]
-            if not sess_df.empty:
-                if df.empty:
-                    df = sess_df.copy()
-                    df = _enforce_schema(df, WARDROBE_SCHEMA)
-                    df.to_csv(WARDROBE_FILE, index=False)
-                else:
-                    # Merge any garments present in session state but not yet saved in CSV
-                    missing_ids = set(sess_df["item_id"].dropna()) - set(df["item_id"].dropna())
-                    if missing_ids:
-                        missing_rows = sess_df[sess_df["item_id"].isin(missing_ids)]
-                        df = pd.concat([df, missing_rows], ignore_index=True)
+    # Session State Resilient Sync across Streamlit runs (skipped in pytest)
+    from src.user_manager import is_test_environment
+    if not is_test_environment():
+        try:
+            import streamlit as st
+            cache_key = f"wardrobe_df_{uid}"
+            if cache_key in st.session_state and isinstance(st.session_state[cache_key], pd.DataFrame):
+                sess_df = st.session_state[cache_key]
+                if not sess_df.empty:
+                    if df.empty:
+                        df = sess_df.copy()
                         df = _enforce_schema(df, WARDROBE_SCHEMA)
-                        df.to_csv(WARDROBE_FILE, index=False)
-        st.session_state["wardrobe_df"] = df.copy()
-    except Exception:
-        pass
+                        df.to_csv(target_file, index=False)
+                    else:
+                        # Merge any garments present in session state but not yet saved in CSV
+                        missing_ids = set(sess_df["item_id"].dropna()) - set(df["item_id"].dropna())
+                        if missing_ids:
+                            missing_rows = sess_df[sess_df["item_id"].isin(missing_ids)]
+                            df = pd.concat([df, missing_rows], ignore_index=True)
+                            df = _enforce_schema(df, WARDROBE_SCHEMA)
+                            df.to_csv(target_file, index=False)
+            st.session_state[cache_key] = df.copy()
+            st.session_state["wardrobe_df"] = df.copy()
+        except Exception:
+            pass
 
     return df
 
@@ -211,33 +227,32 @@ def _empty_wardrobe() -> pd.DataFrame:
     return pd.DataFrame(columns=list(WARDROBE_SCHEMA.keys()))
 
 
-def save_wardrobe(df: pd.DataFrame) -> bool:
+def save_wardrobe(df: pd.DataFrame, user_id: Optional[str] = None) -> bool:
     """Write the wardrobe DataFrame to CSV.  Returns True on success."""
     ensure_user_data_dirs()
+    target_file = get_user_wardrobe_file(user_id)
+    uid = user_id or get_active_user()
     try:
         df = _enforce_schema(df, WARDROBE_SCHEMA)
-        df.to_csv(WARDROBE_FILE, index=False)
-        try:
-            import streamlit as st
-            st.session_state["wardrobe_df"] = df.copy()
-        except Exception:
-            pass
+        df.to_csv(target_file, index=False)
+        from src.user_manager import is_test_environment
+        if not is_test_environment():
+            try:
+                import streamlit as st
+                st.session_state[f"wardrobe_df_{uid}"] = df.copy()
+                st.session_state["wardrobe_df"] = df.copy()
+            except Exception:
+                pass
         return True
     except Exception as e:
         print(f"[data_manager] Error saving wardrobe — {e}")
         return False
 
 
-def add_garment(garment_dict: dict) -> str:
+def add_garment(garment_dict: dict, user_id: Optional[str] = None) -> str:
     """
-    Validate and append a single garment to the wardrobe CSV.
+    Validate and append a single garment to the user's wardrobe CSV.
     Returns the new item_id on success, or raises ValueError on bad input.
-
-    ALGORITHM:
-      1. Validate required fields.
-      2. Fill defaults for optional fields.
-      3. Assign a unique item_id.
-      4. Append to the existing CSV.
     """
     # ── Validation ──
     required = ["category", "color"]
@@ -258,44 +273,44 @@ def add_garment(garment_dict: dict) -> str:
         row["times_worn"] = 0
 
     # ── Append ──
-    df = load_wardrobe()
+    df = load_wardrobe(user_id=user_id)
     new_row = pd.DataFrame([row])
     df = pd.concat([df, new_row], ignore_index=True)
-    save_wardrobe(df)
+    save_wardrobe(df, user_id=user_id)
     return item_id
 
 
-def get_garment(item_id: str) -> dict | None:
+def get_garment(item_id: str, user_id: Optional[str] = None) -> dict | None:
     """Return a single garment as a dict, or None if not found."""
-    df = load_wardrobe()
+    df = load_wardrobe(user_id=user_id)
     row = df[df["item_id"] == item_id]
     if row.empty:
         return None
     return row.iloc[0].to_dict()
 
 
-def update_garment(item_id: str, updates: dict) -> bool:
+def update_garment(item_id: str, updates: dict, user_id: Optional[str] = None) -> bool:
     """
     Update specific fields of a garment identified by item_id.
     Returns True on success, False if item not found.
     """
-    df = load_wardrobe()
+    df = load_wardrobe(user_id=user_id)
     mask = df["item_id"] == item_id
     if not mask.any():
         return False
     for col, val in updates.items():
         if col in df.columns:
             df.loc[mask, col] = val
-    return save_wardrobe(df)
+    return save_wardrobe(df, user_id=user_id)
 
 
-def delete_garment(item_id: str) -> bool:
+def delete_garment(item_id: str, user_id: Optional[str] = None) -> bool:
     """
-    Remove a garment from the wardrobe.
+    Remove a garment from the user's wardrobe.
     Also deletes its photo if one is stored locally.
     Returns True on success.
     """
-    df = load_wardrobe()
+    df = load_wardrobe(user_id=user_id)
     row = df[df["item_id"] == item_id]
     if row.empty:
         return False
@@ -309,11 +324,19 @@ def delete_garment(item_id: str) -> bool:
             pass  # File deletion is best-effort
 
     df = df[df["item_id"] != item_id]
-    return save_wardrobe(df)
+    return save_wardrobe(df, user_id=user_id)
 
 
-def increment_wear_count(item_id: str, worn_date: str | None = None) -> bool:
+def increment_wear_count(item_id: str, worn_date: str | None = None, user_id: Optional[str] = None) -> bool:
     """Increase times_worn by 1 and update last_worn date."""
+    df = load_wardrobe(user_id=user_id)
+    mask = df["item_id"] == item_id
+    if not mask.any():
+        return False
+    curr = int(pd.to_numeric(df.loc[mask, "times_worn"].values[0], errors="coerce") or 0)
+    df.loc[mask, "times_worn"] = curr + 1
+    df.loc[mask, "last_worn"]  = worn_date or today_str()
+    return save_wardrobe(df, user_id=user_id)
     date = worn_date or today_str()
     df = load_wardrobe()
     mask = df["item_id"] == item_id
@@ -355,11 +378,12 @@ def save_outfit(outfit_dict: dict) -> str:
 # FEEDBACK CSV OPERATIONS
 # ─────────────────────────────────────────────
 
-def load_feedback() -> pd.DataFrame:
+def load_feedback(user_id: Optional[str] = None) -> pd.DataFrame:
     ensure_user_data_dirs()
-    if os.path.exists(FEEDBACK_FILE):
+    target_file = get_user_feedback_file(user_id)
+    if os.path.exists(target_file):
         try:
-            df = pd.read_csv(FEEDBACK_FILE, dtype=str)
+            df = pd.read_csv(target_file, dtype=str)
             df = _enforce_schema(df, FEEDBACK_SCHEMA)
             df["user_rating"] = pd.to_numeric(df["user_rating"], errors="coerce").fillna(0).astype(int)
             df["accepted"] = df["accepted"].map({"True": True, "False": False, True: True, False: False}).fillna(False)
@@ -370,15 +394,18 @@ def load_feedback() -> pd.DataFrame:
     return pd.DataFrame(columns=list(FEEDBACK_SCHEMA.keys()))
 
 
-def save_feedback_record(feedback_dict: dict) -> str:
+def save_feedback_record(feedback_dict: dict, user_id: Optional[str] = None) -> str:
     """Append a feedback record and return feedback_id."""
+    ensure_user_data_dirs()
+    target_file = get_user_feedback_file(user_id)
     feedback_id = generate_id("fb_")
     feedback_dict["feedback_id"] = feedback_id
     feedback_dict["timestamp"]   = now_str()
-    df = load_feedback()
+    df = load_feedback(user_id=user_id)
     new_row = pd.DataFrame([feedback_dict])
     df = pd.concat([df, new_row], ignore_index=True)
-    df.to_csv(FEEDBACK_FILE, index=False)
+    df = _enforce_schema(df, FEEDBACK_SCHEMA)
+    df.to_csv(target_file, index=False)
     return feedback_id
 
 
@@ -386,20 +413,23 @@ def save_feedback_record(feedback_dict: dict) -> str:
 # WEAR HISTORY OPERATIONS
 # ─────────────────────────────────────────────
 
-def load_wear_history() -> pd.DataFrame:
+def load_wear_history(user_id: Optional[str] = None) -> pd.DataFrame:
     ensure_user_data_dirs()
-    if os.path.exists(WEAR_HISTORY_FILE):
+    target_file = get_user_wear_history_file(user_id)
+    if os.path.exists(target_file):
         try:
-            return pd.read_csv(WEAR_HISTORY_FILE, dtype=str)
+            return pd.read_csv(target_file, dtype=str)
         except Exception:
             return pd.DataFrame(columns=list(WEAR_HISTORY_SCHEMA.keys()))
     return pd.DataFrame(columns=list(WEAR_HISTORY_SCHEMA.keys()))
 
 
-def record_wear_event(item_ids: list, outfit_id: str, occasion: str, worn_date: str | None = None) -> None:
+def record_wear_event(item_ids: list, outfit_id: str, occasion: str, worn_date: str | None = None, user_id: Optional[str] = None) -> None:
     """Save a wear event for each item in the outfit."""
+    ensure_user_data_dirs()
+    target_file = get_user_wear_history_file(user_id)
     date = worn_date or today_str()
-    df = load_wear_history()
+    df = load_wear_history(user_id=user_id)
     rows = []
     for iid in item_ids:
         rows.append({
@@ -409,21 +439,22 @@ def record_wear_event(item_ids: list, outfit_id: str, occasion: str, worn_date: 
             "worn_date":  date,
             "occasion":   occasion,
         })
-        increment_wear_count(iid, date)
+        increment_wear_count(iid, date, user_id=user_id)
     df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
-    df.to_csv(WEAR_HISTORY_FILE, index=False)
+    df.to_csv(target_file, index=False)
 
 
 # ─────────────────────────────────────────────
 # USER PREFERENCES
 # ─────────────────────────────────────────────
 
-def load_preferences() -> dict:
+def load_preferences(user_id: Optional[str] = None) -> dict:
     """Load user preferences JSON, returning defaults if file missing."""
     ensure_user_data_dirs()
-    if os.path.exists(PREFERENCES_FILE):
+    target_file = get_user_preferences_file(user_id)
+    if os.path.exists(target_file):
         try:
-            with open(PREFERENCES_FILE, "r", encoding="utf-8") as f:
+            with open(target_file, "r", encoding="utf-8") as f:
                 prefs = json.load(f)
             # Merge with defaults so new fields are always present
             merged = dict(DEFAULT_PREFERENCES)
@@ -434,11 +465,12 @@ def load_preferences() -> dict:
     return dict(DEFAULT_PREFERENCES)
 
 
-def save_preferences(prefs: dict) -> bool:
+def save_preferences(prefs: dict, user_id: Optional[str] = None) -> bool:
     """Write user preferences to JSON."""
     ensure_user_data_dirs()
+    target_file = get_user_preferences_file(user_id)
     try:
-        with open(PREFERENCES_FILE, "w", encoding="utf-8") as f:
+        with open(target_file, "w", encoding="utf-8") as f:
             json.dump(prefs, f, indent=2)
         return True
     except Exception as e:
@@ -462,17 +494,18 @@ def load_sample_wardrobe() -> pd.DataFrame:
     return _empty_wardrobe()
 
 
-def import_sample_data() -> int:
+def import_sample_data(user_id: Optional[str] = None) -> int:
     """
-    Copy sample wardrobe records into the live wardrobe,
+    Copy sample wardrobe records into the user's live wardrobe,
     but only if the wardrobe is currently empty.
     Returns the number of items imported.
     """
-    df = load_wardrobe()
+    df = load_wardrobe(user_id=user_id)
     if not df.empty:
         return 0   # Don't overwrite existing data
     sample = load_sample_wardrobe()
     if sample.empty:
         return 0
-    save_wardrobe(sample)
+    save_wardrobe(sample, user_id=user_id)
     return len(sample)
+

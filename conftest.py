@@ -21,7 +21,21 @@ def temp_user_data(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "IMAGES_DIR",        str(tmp_path / "images"))
     monkeypatch.setattr(s, "ML_MODEL_FILE",     str(tmp_path / "rf_model.joblib"))
 
+    try:
+        import streamlit as st
+        st.session_state.clear()
+    except Exception:
+        pass
+
+    import src.user_manager as um
     import src.data_manager as dm
+    importlib.reload(um)
     importlib.reload(dm)
     yield
+    importlib.reload(um)
     importlib.reload(dm)
+    try:
+        import streamlit as st
+        st.session_state.clear()
+    except Exception:
+        pass

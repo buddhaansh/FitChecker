@@ -1,0 +1,5 @@
+feedback_id,outfit_id,user_rating,accepted,worn,occasion,weather,notes,timestamp,is_sample
+fb_fad49088,outfit_27604dfd,0,True,False,Daily College Wear,Warm,,2026-11-01 21:05:03,False
+fb_19260387,outfit_2e6460c9,0,True,False,Party / Night Out,Any,,2026-11-01 21:05:03,False
+fb_62aaea79,outfit_e2a655ec,0,True,False,Gym / Sports,Any,,2026-11-01 21:05:03,False
+fb_4ad4d98b,outfit_869bb8c9,0,True,False,Casual Outing,Any,,2026-11-01 21:05:04,False

@@ -176,21 +176,21 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
         # Outer margins (floor tiles, chair legs, side walls, hanger hook) -> Definite Background
         mask = np.full((proc_h, proc_w), cv2.GC_PR_BGD, dtype=np.uint8)
 
-        # Center garment zone -> Probably Foreground
-        cx1, cx2 = max(1, int(proc_w * 0.09)), min(proc_w - 1, int(proc_w * 0.91))
-        cy1, cy2 = max(1, int(proc_h * 0.07)), min(proc_h - 1, int(proc_h * 0.89))
+        # Center garment zone -> Probably Foreground (generous frame to protect sleeves & collars)
+        cx1, cx2 = max(1, int(proc_w * 0.02)), min(proc_w - 1, int(proc_w * 0.98))
+        cy1, cy2 = max(1, int(proc_h * 0.03)), min(proc_h - 1, int(proc_h * 0.97))
         mask[cy1:cy2, cx1:cx2] = cv2.GC_PR_FGD
 
         # Deep core -> Definite Foreground
-        dcx1, dcx2 = max(1, int(proc_w * 0.25)), min(proc_w - 1, int(proc_w * 0.75))
-        dcy1, dcy2 = max(1, int(proc_h * 0.20)), min(proc_h - 1, int(proc_h * 0.72))
+        dcx1, dcx2 = max(1, int(proc_w * 0.20)), min(proc_w - 1, int(proc_w * 0.80))
+        dcy1, dcy2 = max(1, int(proc_h * 0.15)), min(proc_h - 1, int(proc_h * 0.75))
         mask[dcy1:dcy2, dcx1:dcx2] = cv2.GC_FGD
 
-        # Definite background margins (clears hanger, floor tiles, and side walls)
-        mask[:max(2, int(proc_h * 0.07)), :] = cv2.GC_BGD
-        mask[min(proc_h - 2, int(proc_h * 0.89)):, :] = cv2.GC_BGD
-        mask[:, :max(2, int(proc_w * 0.09))] = cv2.GC_BGD
-        mask[:, min(proc_w - 2, int(proc_w * 0.91)):] = cv2.GC_BGD
+        # Definite background outer perimeter (clears edge artifacts, background floor/wall perimeter)
+        mask[:max(2, int(proc_h * 0.02)), :] = cv2.GC_BGD
+        mask[min(proc_h - 2, int(proc_h * 0.98)):, :] = cv2.GC_BGD
+        mask[:, :max(2, int(proc_w * 0.02))] = cv2.GC_BGD
+        mask[:, min(proc_w - 2, int(proc_w * 0.98)):] = cv2.GC_BGD
 
         # Blue/bright plastic hanger hook clearance in upper 30%
         hsv = cv2.cvtColor(proc_img, cv2.COLOR_BGR2HSV)
@@ -297,7 +297,8 @@ def save_garment_image(
     file_bytes: bytes,
     original_filename: str,
     auto_remove_bg: bool = False,
-    precomputed_cutout: Optional[Image.Image] = None
+    precomputed_cutout: Optional[Image.Image] = None,
+    user_id: Optional[str] = None
 ) -> tuple[str, str]:
     """
     Process and save an uploaded garment image.
@@ -312,7 +313,9 @@ def save_garment_image(
     saved_path is empty string if an error occurred.
     """
     import io
-    os.makedirs(IMAGES_DIR, exist_ok=True)
+    from src.user_manager import get_user_images_dir
+    target_img_dir = get_user_images_dir(user_id)
+    os.makedirs(target_img_dir, exist_ok=True)
 
     try:
         img = Image.open(io.BytesIO(file_bytes))
@@ -325,7 +328,7 @@ def save_garment_image(
             try:
                 cutout_img = precomputed_cutout if precomputed_cutout is not None else remove_background(img)
                 filename = f"garment_{uid}.png"
-                filepath = os.path.join(IMAGES_DIR, filename)
+                filepath = os.path.join(target_img_dir, filename)
                 cutout_img.save(filepath, format="PNG")
                 return filepath, ""
             except Exception:
@@ -334,7 +337,7 @@ def save_garment_image(
         if img.mode not in ("RGB",):
             img = img.convert("RGB")
         filename = f"garment_{uid}.jpg"
-        filepath = os.path.join(IMAGES_DIR, filename)
+        filepath = os.path.join(target_img_dir, filename)
         img.save(filepath, format="JPEG", quality=85)
         return filepath, ""
     except Exception as e:
