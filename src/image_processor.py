@@ -172,37 +172,25 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
         proc_h, proc_w = orig_h, orig_w
 
     try:
-        # Smart Mask Initialization:
-        # Outer margins (floor tiles, chair legs, side walls, hanger hook) -> Definite Background
-        mask = np.full((proc_h, proc_w), cv2.GC_PR_BGD, dtype=np.uint8)
+        # Robust Garment Bounding Box initialization:
+        # Sample border margins for true background GMM modeling
+        bx = max(3, int(proc_w * 0.035))
+        by = max(3, int(proc_h * 0.025))
+        rect = (bx, by, max(10, proc_w - 2 * bx), max(10, proc_h - 2 * by))
 
-        # Center garment zone -> Probably Foreground (generous frame to protect sleeves & collars)
-        cx1, cx2 = max(1, int(proc_w * 0.02)), min(proc_w - 1, int(proc_w * 0.98))
-        cy1, cy2 = max(1, int(proc_h * 0.03)), min(proc_h - 1, int(proc_h * 0.97))
-        mask[cy1:cy2, cx1:cx2] = cv2.GC_PR_FGD
-
-        # Deep core -> Definite Foreground
-        dcx1, dcx2 = max(1, int(proc_w * 0.20)), min(proc_w - 1, int(proc_w * 0.80))
-        dcy1, dcy2 = max(1, int(proc_h * 0.15)), min(proc_h - 1, int(proc_h * 0.75))
-        mask[dcy1:dcy2, dcx1:dcx2] = cv2.GC_FGD
-
-        # Definite background outer perimeter (clears edge artifacts, background floor/wall perimeter)
-        mask[:max(2, int(proc_h * 0.02)), :] = cv2.GC_BGD
-        mask[min(proc_h - 2, int(proc_h * 0.98)):, :] = cv2.GC_BGD
-        mask[:, :max(2, int(proc_w * 0.02))] = cv2.GC_BGD
-        mask[:, min(proc_w - 2, int(proc_w * 0.98)):] = cv2.GC_BGD
-
-        # Blue/bright plastic hanger hook clearance in upper 30%
-        hsv = cv2.cvtColor(proc_img, cv2.COLOR_BGR2HSV)
-        blue_hanger = cv2.inRange(hsv, (90, 45, 45), (135, 255, 255))
-        blue_hanger[int(proc_h * 0.30):, :] = 0
-        mask[blue_hanger > 0] = cv2.GC_BGD
-
+        mask = np.zeros((proc_h, proc_w), np.uint8)
         bgd_model = np.zeros((1, 65), np.float64)
         fgd_model = np.zeros((1, 65), np.float64)
 
-        # Multi-modal GMM Graph-Cut optimization
-        cv2.grabCut(proc_img, mask, None, bgd_model, fgd_model, max(iter_count, 6), cv2.GC_INIT_WITH_MASK)
+        # Multi-modal GMM Graph-Cut optimization with bounding frame
+        cv2.grabCut(proc_img, mask, rect, bgd_model, fgd_model, max(iter_count, 6), cv2.GC_INIT_WITH_RECT)
+
+        # Clear blue / bright plastic hanger hook in upper 25%
+        hsv = cv2.cvtColor(proc_img, cv2.COLOR_BGR2HSV)
+        blue_hanger = cv2.inRange(hsv, (90, 45, 45), (135, 255, 255))
+        blue_hanger[int(proc_h * 0.25):, :] = 0
+        mask[blue_hanger > 0] = cv2.GC_BGD
+
         fg = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
 
         # Connected Component Analysis — retain the primary scanned garment
@@ -220,11 +208,6 @@ def remove_background(image_input, margin_pct: float = 0.04, iter_count: int = 5
             clean_fg[labels == best_lbl] = 255
         else:
             clean_fg = fg
-
-        # Fill internal holes (inner lining, buttons, fabric shadows)
-        cnts, _ = cv2.findContours(clean_fg.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if cnts:
-            cv2.drawContours(clean_fg, cnts, -1, 255, thickness=cv2.FILLED)
 
         # Inter-Leg / Crotch Cavity Clearance (for trousers & shorts)
         ext_cnts, _ = cv2.findContours(clean_fg.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
