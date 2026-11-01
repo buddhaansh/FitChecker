@@ -133,11 +133,203 @@ palette_info = resolve_palette(season_curr)
 st.title("📷 Scan & Catalogue Piece")
 st.caption(f"Catalogue pieces into {profile.get('name', 'BUDZ')}'s private digital wardrobe with quiet luxury color guidance for his **{palette_info['name']}** complexion.")
 
-tab_scan, tab_manual = st.tabs(["📷 Scan with Camera / Upload Photo", "📝 Manual Catalogue Entry"])
+tab_batch, tab_scan, tab_manual = st.tabs([
+    "⚡ Batch Upload (Up to 20 Clothes at Once)",
+    "📷 Single Garment Scan / Camera",
+    "📝 Manual Catalogue Entry"
+])
 
 
 # ─────────────────────────────────────────────
-# TAB 1 — SCAN WITH CAMERA OR PHOTO UPLOAD
+# TAB 1 — BATCH UPLOAD (UP TO 20 CLOTHES AT ONCE)
+# ─────────────────────────────────────────────
+with tab_batch:
+    st.subheader("⚡ Batch Garment Upload & AI Auto-Catalogue")
+    st.caption("Drop 2 to 20 clothing photos at once. The AI automatically isolates every piece onto a clean white studio background, extracts colors, detects categories & patterns, and lets you save your entire wardrobe in 1 click.")
+
+    batch_files = st.file_uploader(
+        "Choose or drag multiple clothing photos (JPG, PNG, WEBP — up to 20 images)",
+        type=["jpg", "jpeg", "png", "webp"],
+        accept_multiple_files=True,
+        key="batch_file_uploader"
+    )
+
+    if batch_files:
+        st.markdown(f"**Loaded {len(batch_files)} photo(s).** Processing background cutouts & AI classification...")
+
+        # Initialize session state cache for batch items
+        if "batch_cache" not in st.session_state:
+            st.session_state["batch_cache"] = {}
+
+        # Progress bar during processing
+        progress_bar = st.progress(0, text="Analyzing garments with Computer Vision...")
+
+        processed_items = []
+        for idx, f in enumerate(batch_files):
+            progress_pct = int((idx / len(batch_files)) * 100)
+            progress_bar.progress(progress_pct, text=f"Processing {idx+1}/{len(batch_files)}: {f.name}...")
+
+            f_bytes = f.getvalue()
+            cache_id = f"{f.name}_{len(f_bytes)}"
+
+            if cache_id in st.session_state["batch_cache"]:
+                processed_items.append(st.session_state["batch_cache"][cache_id])
+            else:
+                try:
+                    cutout = remove_background(f_bytes)
+                    colors = extract_dominant_colors(cutout)
+                    info = {"width": cutout.width, "height": cutout.height}
+                    ai_attrs = suggest_garment_attributes(colors, image_input=cutout, image_info=info)
+
+                    top_col = colors[0]["name"] if colors else "White"
+                    top_hex = colors[0]["hex"] if colors else "#FFFFFF"
+
+                    cached_obj = {
+                        "filename": f.name,
+                        "file_bytes": f_bytes,
+                        "cutout_image": cutout,
+                        "colors": colors,
+                        "ai_attrs": ai_attrs,
+                        "top_color": top_col,
+                        "top_hex": top_hex,
+                    }
+                    st.session_state["batch_cache"][cache_id] = cached_obj
+                    processed_items.append(cached_obj)
+                except Exception as e:
+                    st.warning(f"Could not process {f.name}: {e}")
+
+        progress_bar.progress(100, text="✨ All garments analyzed and isolated onto pure white background!")
+
+        st.markdown(f"""
+        <div style="background: #FFFFFF; border: 1.5px solid #DDD1C2; border-radius: 12px; padding: 14px 18px; margin: 16px 0; box-shadow: 0 4px 12px rgba(74, 53, 43, 0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-family: 'Playfair Display', Georgia, serif; font-size: 18px; font-weight: 700; color: #241C18;">
+                    Batch Review ({len(processed_items)} Garments Ready)
+                </span>
+                <span style="background: #2D5A27; color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px;">
+                    AI CLASSIFIED
+                </span>
+            </div>
+            <div style="font-size: 13px; color: #704E38; margin-top: 4px;">
+                Review the AI predictions below. You can tweak any category, color, or formality before saving all pieces in 1 click.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        batch_edit_records = []
+
+        for i, item in enumerate(processed_items):
+            ai_data = item["ai_attrs"]
+            c_img, c_form = st.columns([1.1, 2.5])
+
+            with c_img:
+                st.image(item["cutout_image"].convert("RGB"), caption=item["filename"], use_column_width=True)
+                st.markdown(f"<div style='font-size: 12px; color: #8C3B1E; font-weight: 700; text-align: center;'>Detected: {ai_data['category']} ({int(ai_data['confidence']*100)}%)</div>", unsafe_allow_html=True)
+
+            with c_form:
+                st.markdown(f"**Garment #{i+1}: {item['filename']}**")
+                bf1, bf2 = st.columns(2)
+                with bf1:
+                    # Category
+                    cat_default_idx = CATEGORIES.index(ai_data["category"]) if ai_data["category"] in CATEGORIES else 0
+                    b_cat = st.selectbox(f"Category", CATEGORIES, index=cat_default_idx, key=f"b_cat_{i}")
+
+                    # Primary Color
+                    b_col_idx = 0
+                    for ci, cname in enumerate(AVAILABLE_COLORS):
+                        if cname.lower() == item["top_color"].lower():
+                            b_col_idx = ci
+                            break
+                    b_col = st.selectbox(f"Color", AVAILABLE_COLORS, index=b_col_idx, key=f"b_col_{i}")
+
+                    # Formality
+                    b_formality = st.slider(f"Formality", 1, 5, value=ai_data.get("formality", 3), key=f"b_form_{i}")
+
+                with bf2:
+                    # Pattern
+                    pat_idx = PATTERNS.index(ai_data["pattern"]) if ai_data.get("pattern") in PATTERNS else 0
+                    b_pat = st.selectbox(f"Pattern", PATTERNS, index=pat_idx, key=f"b_pat_{i}")
+
+                    # Fit
+                    fit_idx = FIT_OPTIONS.index(ai_data["fit"]) if ai_data.get("fit") in FIT_OPTIONS else 0
+                    b_fit = st.selectbox(f"Fit", FIT_OPTIONS, index=fit_idx, key=f"b_fit_{i}")
+
+                    # Brand
+                    b_brand = st.text_input(f"Brand (optional)", placeholder="e.g. Zara, Uniqlo, H&M", key=f"b_brand_{i}")
+
+                # Include checkbox
+                b_include = st.checkbox("Include in digital wardrobe", value=True, key=f"b_inc_{i}")
+
+                batch_edit_records.append({
+                    "include": b_include,
+                    "item": item,
+                    "category": b_cat,
+                    "color": b_col,
+                    "color_hex": item["top_hex"],
+                    "pattern": b_pat,
+                    "formality": b_formality,
+                    "fit": b_fit,
+                    "brand": b_brand,
+                    "style_tags": ", ".join(ai_data.get("style_tags", ["Casual"])),
+                    "season": ai_data.get("season", "All Seasons")
+                })
+
+            st.markdown("<hr style='border: none; border-top: 1px dashed #DDD1C2; margin: 16px 0;'>", unsafe_allow_html=True)
+
+        # Batch Save Button
+        st.markdown("<br>", unsafe_allow_html=True)
+        num_selected = sum(1 for r in batch_edit_records if r["include"])
+
+        if st.button(f"✨ Save All {num_selected} Garment(s) to My Digital Wardrobe", type="primary", use_container_width=True, key="btn_save_batch_all"):
+            saved_count = 0
+            with st.spinner(f"Cataloguing {num_selected} pieces into your digital wardrobe..."):
+                for rec in batch_edit_records:
+                    if not rec["include"]:
+                        continue
+
+                    it = rec["item"]
+                    # Save cutout image
+                    saved_path, _ = save_garment_image(
+                        it["file_bytes"],
+                        it["filename"],
+                        auto_remove_bg=True,
+                        precomputed_cutout=it["cutout_image"]
+                    )
+
+                    garment_dict = {
+                        "category":    rec["category"],
+                        "color":       rec["color"],
+                        "color_hex":   rec["color_hex"],
+                        "pattern":     rec["pattern"],
+                        "formality":   rec["formality"],
+                        "style_tags":  rec["style_tags"],
+                        "season":      rec["season"],
+                        "weather":     "Any",
+                        "fit":         rec["fit"],
+                        "brand":       rec["brand"],
+                        "notes":       "Batch catalogued via AI studio",
+                        "photo_path":  saved_path,
+                        "times_worn":  0,
+                        "is_sample":   False,
+                    }
+                    add_garment(garment_dict)
+                    saved_count += 1
+
+            st.session_state.pop("batch_cache", None)
+            st.success(f"🎉 Successfully saved all {saved_count} garments to your wardrobe!")
+            st.balloons()
+
+            b_c1, b_c2 = st.columns(2)
+            with b_c1:
+                if st.button("🧥 VIEW ALL IN MY WARDROBE", type="primary", use_container_width=True, key="btn_b_view_wardrobe"):
+                    st.switch_page("pages/1_My_Wardrobe.py")
+            with b_c2:
+                if st.button("➕ UPLOAD MORE CLOTHES", type="secondary", use_container_width=True, key="btn_b_upload_more"):
+                    st.rerun()
+
+
+# ─────────────────────────────────────────────
+# TAB 2 — SINGLE GARMENT SCAN / CAMERA
 # ─────────────────────────────────────────────
 with tab_scan:
     st.subheader("Scan Garment")
@@ -286,7 +478,8 @@ with tab_scan:
                     p_formality = st.slider("Formality (1=Casual, 5=Formal)", 1, 5, value=ai_attrs["formality"])
 
                 with p2:
-                    p_pattern   = st.selectbox("Pattern", PATTERNS)
+                    p_pat_idx   = PATTERNS.index(ai_attrs["pattern"]) if ai_attrs.get("pattern") in PATTERNS else 0
+                    p_pattern   = st.selectbox("Pattern", PATTERNS, index=p_pat_idx)
                     p_fit       = st.selectbox("Fit", FIT_OPTIONS,
                                                index=FIT_OPTIONS.index(ai_attrs["fit"]) if ai_attrs["fit"] in FIT_OPTIONS else 0)
                     default_styles = [s for s in ai_attrs.get("style_tags", ["Casual"]) if s in STYLE_TAGS]

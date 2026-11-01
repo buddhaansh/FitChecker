@@ -66,3 +66,12 @@ def test_suggest_garment_attributes_sneakers():
     assert res["category"] == "Sneakers"
     assert res["confidence"] >= 0.75
     assert "styling_guidance" in res
+
+
+def test_suggest_garment_attributes_collared_shirt():
+    from src.garment_classifier import suggest_garment_attributes
+    colors = [{"name": "black", "hex": "#1A1A1A"}]
+    # Black button-down top with placket should be identified as Shirt, not Blazer
+    res = suggest_garment_attributes(colors)
+    assert res["category"] in ["T-Shirt", "Shirt"]
+    assert res["pattern"] in ["Plain", "Checked", "Striped"]

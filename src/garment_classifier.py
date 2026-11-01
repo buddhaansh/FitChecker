@@ -74,13 +74,14 @@ def analyze_garment_silhouette(image_input) -> Dict[str, Any]:
         if arr is None or arr.size == 0:
             return default_res
 
-        # Determine foreground mask
+        # Determine foreground mask (handles both RGBA cutout and RGB on pure white)
         if arr.ndim == 3 and arr.shape[2] == 4:
             alpha = arr[:, :, 3]
             mask = alpha > 40
         else:
             gray = cv2.cvtColor(arr[:, :, :3], cv2.COLOR_RGB2GRAY)
-            mask = (gray < 235) & (gray > 20)
+            # Anything not pure white background is garment (captures all colors including pure black)
+            mask = (gray < 242)
 
         coords = np.argwhere(mask)
         if len(coords) < 80:
@@ -118,35 +119,47 @@ def analyze_garment_silhouette(image_input) -> Dict[str, Any]:
             if upper_w > mid_w * 1.15:
                 shoulder_taper = True
 
-        # ── Button Placket & Collar / Check Pattern Detection (Shirt vs T-Shirt) ──
+        # ── Button Placket, Collar, Lapel & Pattern Detection ──
         has_placket = False
         is_patterned = False
         has_collar = False
+        has_lapel = False
+        detected_pattern = "Plain"
 
-        gray_roi = gray[y0:y1, x0:x1] if 'gray' in locals() else cv2.cvtColor(arr[y0:y1, x0:x1, :3], cv2.COLOR_RGB2GRAY)
+        gray_roi = cv2.cvtColor(arr[y0:y1, x0:x1, :3], cv2.COLOR_RGB2GRAY)
         gh, gw = gray_roi.shape
         if gh >= 40 and gw >= 40:
             # Placket check down vertical center column
             mid_x = gw // 2
-            placket_box = gray_roi[int(gh * 0.20): int(gh * 0.80), max(0, mid_x - 14): min(gw, mid_x + 14)]
+            placket_box = gray_roi[int(gh * 0.18): int(gh * 0.85), max(0, mid_x - 16): min(gw, mid_x + 16)]
             if placket_box.size > 50:
                 sobelx = cv2.Sobel(placket_box, cv2.CV_64F, 1, 0, ksize=3)
-                if np.mean(np.abs(sobelx)) > 26.0:
+                if np.mean(np.abs(sobelx)) > 20.0:
                     has_placket = True
 
-            # Edge density for check / plaid / woven texture
+            # Edge density for check / plaid / striped / printed texture
             center_box = gray_roi[int(gh * 0.25): int(gh * 0.75), int(gw * 0.25): int(gw * 0.75)]
             if center_box.size > 50:
-                edges = cv2.Canny(center_box, 40, 120)
-                if np.mean(edges > 0) > 0.11:
+                edges = cv2.Canny(center_box, 35, 110)
+                pattern_density = float(np.mean(edges > 0))
+                if pattern_density > 0.10:
                     is_patterned = True
+                    detected_pattern = "Checked" if pattern_density > 0.16 else "Striped"
 
-            # Collar check at upper chest
-            collar_box = gray_roi[int(gh * 0.08): int(gh * 0.28), int(gw * 0.25): int(gw * 0.75)]
+            # Collar check at upper neckline
+            collar_box = gray_roi[int(gh * 0.05): int(gh * 0.25), int(gw * 0.25): int(gw * 0.75)]
             if collar_box.size > 50:
-                collar_edges = cv2.Canny(collar_box, 40, 120)
-                if np.mean(collar_edges > 0) > 0.11:
+                collar_edges = cv2.Canny(collar_box, 35, 110)
+                if np.mean(collar_edges > 0) > 0.09:
                     has_collar = True
+
+            # Open V lapel check (distinct for Blazers with open chest & low button point)
+            if not has_placket:
+                lapel_box = gray_roi[int(gh * 0.10): int(gh * 0.38), int(gw * 0.25): int(gw * 0.75)]
+                if lapel_box.size > 50:
+                    l_edges = cv2.Canny(lapel_box, 40, 120)
+                    if np.mean(l_edges > 0) > 0.13:
+                        has_lapel = True
 
         return {
             "aspect_ratio": aspect_ratio,
@@ -159,6 +172,8 @@ def analyze_garment_silhouette(image_input) -> Dict[str, Any]:
             "has_placket": has_placket,
             "is_patterned": is_patterned,
             "has_collar": has_collar,
+            "has_lapel": has_lapel,
+            "detected_pattern": detected_pattern,
         }
 
     except Exception:
@@ -356,46 +371,55 @@ def suggest_garment_attributes(
         has_placket = sil.get("has_placket", False)
         is_patterned = sil.get("is_patterned", False)
         has_collar = sil.get("has_collar", False)
+        has_lapel = sil.get("has_lapel", False)
+        shoulder_taper = sil.get("shoulder_taper", False)
 
         is_formal_dark = color_name in ("black", "charcoal", "dark grey", "navy blue", "dark blue")
 
-        if (ar <= 1.25) and (has_collar or sil.get("shoulder_taper", False)) and (is_formal_dark or color_name in ("khaki", "beige", "grey", "brown")):
+        # 1. SHIRT: Button placket, collar without lapels, or woven pattern
+        if has_placket or (has_collar and not has_lapel) or is_patterned or (color_name in ("navy blue", "dark blue", "blue") and is_tall):
+            category = "Shirt"
+            pattern_desc = "checked/striped pattern" if is_patterned else "collared button-down structure"
+            confidence = 0.92
+            reason = f"Distinct {pattern_desc} with collar and vertical placket indicates a Shirt."
+            formality = 4 if (is_formal_dark and not is_patterned) else 3
+            fit = "Regular"
+            style_tags = ["Smart Casual", "Preppy", "Casual"]
+
+        # 2. BLAZER: Only when there are distinct open V-lapels, structured shoulders, and NO button placket
+        elif (ar <= 1.25) and shoulder_taper and is_formal_dark and has_lapel and not has_placket:
             category = "Blazer"
-            confidence = 0.90
-            reason = f"Structured tailored silhouette (h/w={ar:.2f}) with lapel/collar profile in formal {color_name} indicates a Blazer or Suit Jacket."
+            confidence = 0.88
+            reason = f"Structured tailored silhouette (h/w={ar:.2f}) with lapel profile in formal {color_name} indicates a Blazer or Suit Jacket."
             formality = 4
             fit = "Regular"
             style_tags = ["Formal", "Smart Casual"]
-        elif has_placket or is_patterned or (has_collar and ar >= 1.05) or (ar >= 1.28 and is_formal_dark) or (color_name in ("navy blue", "dark blue", "blue") and is_tall):
-            category = "Shirt"
-            pattern_desc = "plaid/check pattern" if is_patterned else "collared button-down structure"
-            confidence = 0.92
-            reason = f"Distinct {pattern_desc} with vertical placket/collar indicates a Shirt."
-            formality = 3
-            fit = "Regular"
-            style_tags = ["Smart Casual", "Preppy", "Casual"]
+
         elif color_name in ("brown", "dark brown") and is_wide:
             category = "Sandals"
             confidence = 0.70
             reason = f"Brown profile suggests casual footwear."
             formality = 1
             style_tags = ["Casual"]
-        elif color_name in ("white", "cream", "light grey", "grey", "black"):
+
+        # 3. T-SHIRT: Clean collarless torso silhouette
+        elif color_name in ("white", "cream", "light grey", "grey", "black", "navy blue"):
             category = "T-Shirt"
-            confidence = 0.82
-            reason = f"Clean torso silhouette (h/w={ar:.2f}) in versatile neutral {color_name} indicates T-Shirt."
+            confidence = 0.86
+            reason = f"Clean collarless torso silhouette (h/w={ar:.2f}) in versatile {color_name} indicates a T-Shirt."
             formality = 2
             fit = "Regular"
             style_tags = ["Casual", "Minimalist"]
         else:
             category = "T-Shirt"
-            confidence = 0.75
-            reason = f"Proportion (h/w={ar:.2f}) matches core upper casual wear."
+            confidence = 0.78
+            reason = f"Standard torso proportions (h/w={ar:.2f}) match core casual wear (T-Shirt)."
             formality = 2
             fit = "Regular"
             style_tags = ["Casual"]
 
     styling = get_garment_styling_advice(category, color_name)
+    detected_pattern = sil.get("detected_pattern", "Plain")
 
     return {
         "category": category,
@@ -406,6 +430,7 @@ def suggest_garment_attributes(
         "fit": fit,
         "style_tags": style_tags,
         "season": season,
+        "pattern": detected_pattern,
         "styling_guidance": styling,
         "silhouette": sil,
     }
