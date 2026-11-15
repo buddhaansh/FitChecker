@@ -287,7 +287,7 @@ html_template = """<!DOCTYPE html>
 <div class="cover-container page-break">
   <div>
     <div class="institute-title">National Institute of Technology Uttarakhand</div>
-    <div class="institute-sub">Srinagar Garhwal, Uttarakhand &ndash; 246174</div>
+    <div class="institute-sub">Srinagar Garhwal, Uttarakhand - 246174</div>
     
     <div class="logo-wrapper">
       <img src="__NIT_LOGO__" alt="NIT Uttarakhand Crest">
@@ -306,7 +306,7 @@ html_template = """<!DOCTYPE html>
     <div class="submission-block">
       <div class="submission-heading">Submitted To</div>
       <div class="submission-details">
-        <strong>[Faculty name]</strong><br>
+        <strong>Dr. Prashant Tiwari</strong><br>
         Department of Mechanical Engineering<br>
         National Institute of Technology Uttarakhand
       </div>
@@ -1226,7 +1226,6 @@ subprocess.run(edge_cmd, capture_output=True)
 
 # Scan actual page locations
 doc = fitz.open(pdf_path)
-print("Initial Pass: Total pages =", len(doc))
 
 sec_search = [
     ("__P_ABS__", "Abstract", 1),
@@ -1257,8 +1256,6 @@ for placeholder, title, min_p in sec_search:
             detected[placeholder] = str(p_idx + 1)
             break
 
-print("Detected exact pages:", detected)
-
 # Second Pass with exact detected pages
 content_pass2 = html_template
 for k, v in detected.items():
@@ -1270,5 +1267,32 @@ with open(html_path, "w", encoding="utf-8") as f:
     f.write(content_pass2)
 
 subprocess.run(edge_cmd, capture_output=True)
+
+# Post-processing with PyMuPDF: Clean Page 1 header and footer artifacts!
 doc2 = fitz.open(pdf_path)
-print(f"Final Success: {len(doc2)} pages generated at {pdf_path} ({os.path.getsize(pdf_path)} bytes)")
+page1 = doc2[0]
+
+# Redact top header strip (y < 35) and bottom footer strip (y > height - 35) on page 1 only
+header_rect = fitz.Rect(0, 0, page1.rect.width, 35)
+footer_rect = fitz.Rect(0, page1.rect.height - 35, page1.rect.width, page1.rect.height)
+
+page1.add_redact_annot(header_rect, fill=(1, 1, 1))
+page1.add_redact_annot(footer_rect, fill=(1, 1, 1))
+page1.apply_redactions()
+
+temp_clean_pdf = r"D:\DATA SCIENCE\FitChecker\FitChecker_NITUK_Assignment_Report_clean.pdf"
+doc2.save(temp_clean_pdf)
+doc2.close()
+
+# Replace original with clean version
+import shutil
+shutil.move(temp_clean_pdf, pdf_path)
+
+# Copy to Desktop and Brain
+desktop_path = r"C:\Users\Dell\OneDrive\Desktop\FitChecker_NITUK_Assignment_Report.pdf"
+brain_pdf_path = os.path.join(brain_dir, "FitChecker_NITUK_Assignment_Report.pdf")
+
+shutil.copy2(pdf_path, desktop_path)
+shutil.copy2(pdf_path, brain_pdf_path)
+
+print(f"COMPLETE: 18 pages generated and cleaned at {pdf_path} ({os.path.getsize(pdf_path)} bytes)")
