@@ -2,6 +2,7 @@ import os
 import base64
 import subprocess
 import fitz
+import shutil
 
 def img_to_b64(path):
     if not os.path.exists(path):
@@ -182,25 +183,6 @@ html_content = """<!DOCTYPE html>
     color: #1e293b;
   }
 
-  /* Table of Contents */
-  .toc-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 2px;
-    font-size: 8.8pt;
-  }
-  .toc-title { font-weight: bold; }
-  .toc-sub { padding-left: 14px; }
-  .toc-dots {
-    flex-grow: 1;
-    border-bottom: 1px dotted #64748b;
-    margin: 0 6px;
-    position: relative;
-    top: -3px;
-  }
-  .toc-page { font-weight: bold; color: #1e293b; }
-
   /* Tables */
   table {
     width: 100%;
@@ -308,7 +290,7 @@ html_content = """<!DOCTYPE html>
   </div>
 </div>
 
-<!-- PAGE 2: ABSTRACT & TABLE OF CONTENTS -->
+<!-- PAGE 2: ABSTRACT & SECTION 1 INTRODUCTION -->
 <div class="page-break">
   <h1>Abstract</h1>
   <p>
@@ -320,36 +302,16 @@ html_content = """<!DOCTYPE html>
   <p>
     Personalization is anchored in personal colorimetry across 24 clinical foundation shades (derived from the Monk Skin Tone scale) alongside dedicated dual-palette handling for Vitiligo conditions. A multi-criteria combinatorial outfit recommendation engine ranks ensembles across occasion suitability (30%), color harmony (25%), style/formality coherence (20%), weather suitability (15%), and personal wear history (10%), penalized by a time-decay recency degradation model and fine-tuned by a 100-tree Random Forest classifier. Validated with a 100% pass rate across <strong>130 automated unit and integration tests</strong> and deployed on Streamlit Cloud.
   </p>
-  <p style="margin-bottom: 12px;">
+  <p style="margin-bottom: 10px;">
     <strong>Keywords:</strong> <em>wardrobe management, computer vision, GrabCut segmentation, color harmony, Random Forest, personal colorimetry, Streamlit, local-first computing, multi-criteria recommendation.</em>
   </p>
 
-  <h2 style="margin-top: 10px;">Table of Contents</h2>
-  <div class="toc-row"><span class="toc-title">1. Introduction & Objectives</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
-  <div class="toc-row"><span class="toc-title">2. Existing Approaches & Literature Review</span><span class="toc-dots"></span><span class="toc-page">3</span></div>
-  <div class="toc-row"><span class="toc-title">3. System Requirements & Technology Stack</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
-  <div class="toc-row"><span class="toc-title">4. System Architecture & Workflow</span><span class="toc-dots"></span><span class="toc-page">4</span></div>
-  <div class="toc-row"><span class="toc-title">5. Major Functional Modules & Interface Implementation</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
-  <div class="toc-row toc-sub"><span>5.1 Dress Me: Slot Machine Carousel & 5.2 Styling Canvas</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
-  <div class="toc-row toc-sub"><span>5.3 Eloquent AI Creative Selection</span><span class="toc-dots"></span><span class="toc-page">5</span></div>
-  <div class="toc-row toc-sub"><span>5.4 Digital Wardrobe Gallery & 5.5 Batch Upload Studio</span><span class="toc-dots"></span><span class="toc-page">6</span></div>
-  <div class="toc-row toc-sub"><span>5.6 Mood and Natural-Language Outfit Planner</span><span class="toc-dots"></span><span class="toc-page">6</span></div>
-  <div class="toc-row toc-sub"><span>5.7 GrabCut Background Removal & 5.8 AI Editorial Stylist</span><span class="toc-dots"></span><span class="toc-page">7</span></div>
-  <div class="toc-row toc-sub"><span>5.9 Colorimetry (24 Shades) & Multi-User Isolation</span><span class="toc-dots"></span><span class="toc-page">7</span></div>
-  <div class="toc-row"><span class="toc-title">6. Working Methodology & Mathematical Formulation</span><span class="toc-dots"></span><span class="toc-page">8</span></div>
-  <div class="toc-row"><span class="toc-title">7. Testing, Verification & Experimental Results (130 Tests)</span><span class="toc-dots"></span><span class="toc-page">9</span></div>
-  <div class="toc-row"><span class="toc-title">8. Advantages, Limitations & Future Scope</span><span class="toc-dots"></span><span class="toc-page">10</span></div>
-  <div class="toc-row"><span class="toc-title">9. Conclusion & 10. References</span><span class="toc-dots"></span><span class="toc-page">10</span></div>
-</div>
-
-<!-- PAGE 3: INTRO & EXISTING APPROACHES -->
-<div class="page-break">
   <h2>1. Introduction</h2>
   <h3>1.1 Background & Problem Statement</h3>
   <p>
-    In modern society, apparel purchasing rates have surged, yet consumers consistently utilize less than 30% of their wardrobe. Daily outfit decisions represent a recurring, time-consuming cognitive burden influenced by habit and physical visibility rather than aesthetic optimization. Consumers lack a centralized, searchable, privacy-preserving interface to visualize owned apparel simultaneously. Furthermore, evaluating whether garments harmonize aesthetically, suit skin undertones, or match occasion formality requires fashion color theory knowledge that most individuals lack, leading to wardrobe neglect and redundant purchases.
+    In modern consumer society, apparel purchasing rates have surged, yet individuals consistently utilize less than 30% of their wardrobe. Daily outfit decisions represent a recurring, time-consuming cognitive burden influenced by habit and physical visibility rather than aesthetic optimization. Consumers lack a centralized, searchable, privacy-preserving interface to visualize owned apparel simultaneously. Evaluating whether garments harmonize aesthetically, suit skin undertones, or match occasion formality requires domain knowledge in fashion color theory that most individuals lack, leading to closet neglect and redundant purchases.
   </p>
-  <h3>1.2 Research Objectives</h3>
+  <h3>1.2 Objectives & Scope</h3>
   <ul>
     <li><strong>Automated Ingestion:</strong> Isolate apparel from unconstrained smartphone photos onto solid white studio backgrounds without manual tracing.</li>
     <li><strong>Zero-Friction Batching:</strong> Ingest up to 20 garments simultaneously with automatic category, fit, and pattern inference.</li>
@@ -357,11 +319,10 @@ html_content = """<!DOCTYPE html>
     <li><strong>Multi-Objective Recommendation:</strong> Score outfits across occasion, color harmony, style coherence, weather, and wear recency.</li>
     <li><strong>Adaptive Learning:</strong> Train a balanced Random Forest classifier on interaction history to refine thresholds over time.</li>
   </ul>
-  <h3>1.3 Scope of the Project</h3>
-  <p>
-    The scope encompasses face-based skin tone calibration, automated image background isolation, multi-item batch ingestion, interactive canvas assembly, stochastic AI curation, natural-language mood planning, and wardrobe analytics. The system operates strictly as a local-first, privacy-respecting platform, excluding commercial retail linking and third-party data tracking.
-  </p>
+</div>
 
+<!-- PAGE 3: EXISTING APPROACHES & REQUIREMENTS -->
+<div class="page-break">
   <h2>2. Existing Approaches & Literature Review</h2>
   <h3>2.1 Conventional Methods vs. Proposed Architecture</h3>
   <p>
@@ -418,10 +379,7 @@ html_content = """<!DOCTYPE html>
   <p>
     FitChecker relies exclusively on the user's wardrobe as the source of truth, automating background isolation and multi-objective scoring without cloud API costs or data leakage.
   </p>
-</div>
 
-<!-- PAGE 4: REQUIREMENTS & ARCHITECTURE -->
-<div class="page-break">
   <h2>3. System Requirements and Technologies</h2>
   <h3>3.1 System Specifications</h3>
   <table>
@@ -434,56 +392,51 @@ html_content = """<!DOCTYPE html>
     </thead>
     <tbody>
       <tr>
-        <td><strong>Host Computing Device</strong></td>
-        <td>Modern PC / Mac / Linux (Intel i5/Ryzen 5)</td>
+        <td><strong>Host Device</strong></td>
+        <td>Modern PC / Mac / Linux</td>
         <td>Production hosted on Streamlit Cloud container</td>
       </tr>
       <tr>
-        <td><strong>Primary Memory & Storage</strong></td>
-        <td>4 GB RAM &bull; 500 MB Free Disk Space</td>
-        <td>8 GB RAM recommended for multi-item concurrent CV</td>
+        <td><strong>Memory & Storage</strong></td>
+        <td>4 GB RAM &bull; 500 MB Storage</td>
+        <td>8 GB RAM recommended for concurrent batch CV</td>
       </tr>
       <tr>
-        <td><strong>Programming Language</strong></td>
-        <td>Python 3.12.x Runtime Environment</td>
+        <td><strong>Language & Runtime</strong></td>
+        <td>Python 3.12.x Environment</td>
         <td>Core computational execution and pipeline orchestration</td>
       </tr>
       <tr>
-        <td><strong>Web Application Engine</strong></td>
+        <td><strong>Web App Engine</strong></td>
         <td>Streamlit Framework (v1.40+)</td>
         <td>Reactive presentation layer and session state control</td>
       </tr>
       <tr>
-        <td><strong>Computer Vision Suite</strong></td>
+        <td><strong>Computer Vision</strong></td>
         <td>OpenCV (<code>cv2</code> v4.10) & Pillow</td>
-        <td>GrabCut GMM segmentation, contour analysis, Canny edge detection</td>
+        <td>GrabCut GMM segmentation, contour analysis, Canny edges</td>
       </tr>
       <tr>
-        <td><strong>Machine Learning Library</strong></td>
+        <td><strong>Machine Learning</strong></td>
         <td>Scikit-Learn (v1.5+)</td>
         <td>Random Forest classifier, balanced weighting, feature vectors</td>
       </tr>
       <tr>
-        <td><strong>Numerical & Data Tables</strong></td>
+        <td><strong>Numerical Tables</strong></td>
         <td>NumPy & Pandas</td>
         <td>Matrix-based color distance and tabular CSV persistence</td>
       </tr>
     </tbody>
   </table>
+  <p>
+    <strong>AI & Agentic Frameworks:</strong> The architecture, algorithms, and vision pipelines were designed, tested, and validated using DeepMind's Antigravity agentic environment, maintaining a continuous 130-test regression harness.
+  </p>
+</div>
 
-  <h3>3.2 Technologies & AI Frameworks Used</h3>
-  <p>
-    <strong>OpenCV Computer Vision:</strong> Implements iterative GrabCut min-cut energy optimization with perimeter sampling, blue hanger clearance in HSV color space, and cavity-preserving connected component analysis.
-  </p>
-  <p>
-    <strong>Scikit-Learn Ensemble ML:</strong> Deploys a 100-tree Random Forest classifier trained on 9-dimensional dense interaction vectors. It mitigates feedback sparsity through balanced class weighting W_j = N / (2N_j).
-  </p>
-  <p>
-    <strong>Agentic AI Pair Programming (Google Antigravity):</strong> The entire software architecture, mathematical formulas, and computer vision routines were designed and continuously validated using DeepMind's Antigravity agentic environment, enforcing a rigorous 130-test regression harness.
-  </p>
-
+<!-- PAGE 4: ARCHITECTURE & MODULES PART 1 -->
+<div class="page-break">
   <h2>4. System Architecture and Design</h2>
-  <h3>4.1 Architectural Layers Overview</h3>
+  <h3>4.1 Architectural Layers & Workflow</h3>
   <p>
     FitChecker adheres to a decoupled three-tier architectural paradigm:
   </p>
@@ -492,20 +445,11 @@ html_content = """<!DOCTYPE html>
     <li><strong>Computational & AI Processing Layer:</strong> Converts raw uploads into standardized <code>#FFFFFF</code> studio cutouts via GrabCut, extracts geometric ratios and Canny placket edges for classification, and ranks outfits via combinatorial scoring and Random Forest inference.</li>
     <li><strong>Data Persistence Layer:</strong> Maintains isolated, directory-partitioned storage per user (<code>user_data/users/&lt;username&gt;/</code>) containing localized CSV files and cutouts, protected by Master PIN authentication (<code>7777</code>).</li>
   </ul>
-  <h3>4.2 End-to-End Operational Workflow</h3>
-  <ol>
-    <li><strong>Profile Setup:</strong> User uploads face selfie; engine maps facial chrominance to one of 24 foundation shades.</li>
-    <li><strong>Batch Ingestion:</strong> User drops up to 20 photos; system isolates backgrounds, extracts hex codes, and auto-tags attributes.</li>
-    <li><strong>Editable Verification:</strong> User reviews parsed items in batch grid and commits collection in one atomic transaction.</li>
-    <li><strong>Outfit Synthesis:</strong> User triggers outfits via carousel, interactive canvas, Eloquent AI, or natural-language prompts.</li>
-    <li><strong>Wear Feedback:</strong> Selecting "I Wore This Today" increments wear counters, updating analytics and recency decay.</li>
-  </ol>
-</div>
+  <p>
+    <strong>Operational Workflow:</strong> (1) User calibrates skin tone via selfie; (2) Ingests up to 20 garments simultaneously; (3) Reviews and commits items in batch review grid; (4) Synthesizes daily outfits via carousel or AI; (5) Logs wears to trigger recency decay and update analytics.
+  </p>
 
-<!-- PAGE 5: MODULES PART 1 -->
-<div class="page-break">
   <h2>5. Major Modules & Interface Implementation</h2>
-
   <h3>5.1 Dress Me: Slot Machine Carousel</h3>
   <p>
     The primary interface presents a dynamic 4-tier interactive carousel (Figure 1). Users scroll tops, bottoms, outerwear, and footwear independently. A continuous correlation algorithm computes real-time aesthetic compatibility: as the user scrolls tops, the engine dynamically pre-selects the highest-scoring matching bottom and updates the flat-lay visualization in real time.
@@ -527,7 +471,10 @@ html_content = """<!DOCTYPE html>
     </div>
     <div class="figure-caption">Figure 2: Interactive Styling Canvas with Multi-Layer Garment Selectors and Flat-Lay Board</div>
   </div>
+</div>
 
+<!-- PAGE 5: MODULES PART 2 -->
+<div class="page-break">
   <h3>5.3 Eloquent AI Creative Selection</h3>
   <p>
     The Eloquent AI module (Figure 3) automates complete outfit curation via stochastic temperature-weighted sampling (&tau; &isin; [0.1, 1.0], default 0.75). At lower temperatures, the model adheres strictly to classic neutral pairings; at higher temperatures, it explores adventurous complementary and triadic color accents while respecting body proportion equilibrium.
@@ -538,10 +485,7 @@ html_content = """<!DOCTYPE html>
     </div>
     <div class="figure-caption">Figure 3: Eloquent AI Selection Interface with Creativity Temperature Control and Occasion Target</div>
   </div>
-</div>
 
-<!-- PAGE 6: MODULES PART 2 -->
-<div class="page-break">
   <h3>5.4 Digital Wardrobe and Cutouts Gallery</h3>
   <p>
     The Digital Wardrobe gallery (Figure 4) serves as the visual repository for all ingested garments. Each piece is displayed as a standardized cutout on pure white, accompanied by formality pills (1 to 5), fabric color swatches, and wear counters. A multi-tier filtering header enables instantaneous sorting by category (Tops, Bottoms, Layers, Shoes) as well as personal color affinity (Best Matches, Add Warmth, Foundation Staples).
@@ -563,7 +507,10 @@ html_content = """<!DOCTYPE html>
     </div>
     <div class="figure-caption">Figure 5: High-Throughput Batch Upload Studio Supporting Concurrent Ingestion of up to 20 Garments</div>
   </div>
+</div>
 
+<!-- PAGE 6: MODULES PART 3 -->
+<div class="page-break">
   <h3>5.6 Mood and Natural-Language Outfit Planner</h3>
   <p>
     The Mood and Outfit Planner (Figure 6) allows users to express styling requirements in natural language (e.g. <em>"Dinner with friends, polished but comfortable"</em>, <em>"Rainy Monday presentation"</em>). The module parses contextual keywords, maps them to occasion profiles and weather parameters, and curates an ensemble drawn exclusively from the user's digitized closet.
@@ -574,10 +521,7 @@ html_content = """<!DOCTYPE html>
     </div>
     <div class="figure-caption">Figure 6: Natural-Language Mood and Outfit Planner with Quick-Select Situational Prompts</div>
   </div>
-</div>
 
-<!-- PAGE 7: MODULES PART 3 -->
-<div class="page-break">
   <h3>5.7 Advanced GrabCut Studio Background Isolation</h3>
   <p>
     Standard background subtraction fails when clothes are photographed against textured walls or patterned bedsheets. FitChecker implements adaptive perimeter sampling with <code>cv2.GC_INIT_WITH_RECT</code>, bounding garments by bx = max(3, 0.035W) and by = max(3, 0.025H). Concave underarm spaces and leg bifurcations are preserved by eliminating aggressive contour filling, compositing cutouts onto solid <code>#FFFFFF</code> studio white (Figure 7).
@@ -587,12 +531,12 @@ html_content = """<!DOCTYPE html>
       <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
         <div style="text-align: center;">
           <div style="font-size: 7.5pt; font-weight: bold; color: #dc2626;">RAW SMARTPHONE INPUT</div>
-          <img src="__FIG7_KURTA_RAW__" style="max-height: 145px; border: 1px solid #cbd5e1;">
+          <img src="__FIG7_KURTA_RAW__" style="max-height: 140px; border: 1px solid #cbd5e1;">
         </div>
         <div style="font-size: 13pt; font-weight: bold; color: #1e3a8a;">&rarr;</div>
         <div style="text-align: center;">
           <div style="font-size: 7.5pt; font-weight: bold; color: #16a34a;">STUDIO CUTOUT (#FFFFFF)</div>
-          <img src="__FIG7_KURTA_CUT__" style="max-height: 145px; border: 1px solid #cbd5e1;">
+          <img src="__FIG7_KURTA_CUT__" style="max-height: 140px; border: 1px solid #cbd5e1;">
         </div>
       </div>
     </div>
@@ -605,18 +549,13 @@ html_content = """<!DOCTYPE html>
   </p>
   <div class="figure-wrapper">
     <div class="figure-frame">
-      <img src="__FIG8_EDITORIAL__" alt="Figure 8: AI Editorial Styling Advice Card" style="max-height: 155px;">
+      <img src="__FIG8_EDITORIAL__" alt="Figure 8: AI Editorial Styling Advice Card" style="max-height: 145px;">
     </div>
     <div class="figure-caption">Figure 8: Live Application Card Showing AI Garment Identification and Editorial Styling Advice</div>
   </div>
-
-  <h3>5.9 Personal Colorimetry (24 Foundation Shades) & Multi-User Isolation</h3>
-  <p>
-    Complexion calibration analyzes facial chrominance, mapping users to one of 24 clinical foundation shades across 6 overarching tiers (Porcelain, Peach, Olive, Golden, Dusky, Espresso) with a dedicated dual-palette mode for Vitiligo. Multi-tenant privacy is enforced through isolated directory partitions (<code>user_data/users/&lt;username&gt;/</code>), secured by an administrative Master Creator PIN (<code>7777</code>).
-  </p>
 </div>
 
-<!-- PAGE 8: METHODOLOGY & MATHEMATICAL FORMULATION -->
+<!-- PAGE 7: METHODOLOGY & MATHEMATICAL FORMULATION -->
 <div class="page-break">
   <h2>6. Working Methodology & Mathematical Formulation</h2>
 
@@ -728,7 +667,7 @@ html_content = """<!DOCTYPE html>
   </p>
 </div>
 
-<!-- PAGE 9: TESTING AND RESULTS -->
+<!-- PAGE 8: TESTING AND RESULTS -->
 <div class="page-break">
   <h2>7. Testing, Verification and Experimental Results</h2>
 
@@ -876,11 +815,11 @@ html_content = """<!DOCTYPE html>
 
   <h3>7.3 Quantitative Performance Observations</h3>
   <p>
-    Experimental verification demonstrates that the GrabCut perimeter sampling pipeline achieves an average background isolation inference latency of <strong>820 milliseconds per garment</strong> on standard consumer hardware. The combinatorial recommendation engine evaluates over 1,000 potential outfit permutations in under <strong>45 milliseconds</strong>, delivering instantaneous flat-lay updates during slot carousel scrolling.
+    Experimental verification demonstrates that the GrabCut perimeter sampling pipeline achieves an average background isolation inference latency of <strong>820 milliseconds per garment</strong> on standard consumer hardware. The elimination of contour cavity filling completely resolved historical clipping errors in armpits and inner leg seams. The combinatorial recommendation engine evaluates over 1,000 potential outfit permutations in under <strong>45 milliseconds</strong>, delivering instantaneous flat-lay updates during slot carousel scrolling.
   </p>
 </div>
 
-<!-- PAGE 10: ADVANTAGES, CONCLUSION & REFERENCES -->
+<!-- PAGE 9: ADVANTAGES, CONCLUSION & REFERENCES -->
 <div class="page-break">
   <h2>8. Advantages, Limitations and Future Scope</h2>
   <h3>8.1 Distinct Advantages & Practical Limitations</h3>
@@ -956,7 +895,6 @@ temp_clean_pdf = r"D:\DATA SCIENCE\FitChecker\FitChecker_NITUK_Assignment_Report
 doc.save(temp_clean_pdf)
 doc.close()
 
-import shutil
 shutil.move(temp_clean_pdf, pdf_path)
 
 # Copy to Desktop and Brain
